@@ -406,7 +406,7 @@ public class AiChatServiceImpl implements AiChatService {
         return switch (intent) {
             case "search_stadiums" -> stadiumSearchHandler.handle(result.getParams(), message, conversationKey, userLat, userLng);
             case "get_slots" -> slotAvailabilityHandler.handle(result.getParams(), message, conversationKey);
-            case "find_match" -> matchRequestHandler.handle(result.getParams(), message, conversationKey);
+            case "find_match" -> matchRequestHandler.handle(result.getParams(), message, conversationKey, userId);
             case "get_policy" -> policyHandler.handle(result.getParams(), message);
             case "create_booking" -> bookingHandler.handleWithRawMessage(result.getParams(), message, conversationKey, userId, rawUserMessage);
             case "join_match" -> joinMatchHandler.handle(result.getParams(), message, conversationKey, userId);
@@ -595,5 +595,10 @@ public class AiChatServiceImpl implements AiChatService {
         return "Bây giờ là " + now.format(DateTimeFormatter.ofPattern("HH:mm"))
                 + " " + dayOfWeekVi + ", ngày " + today.format(DateTimeFormatter.ISO_LOCAL_DATE)
                 + " (giờ Việt Nam). Hãy dùng mốc này để quy đổi 'hôm nay', 'ngày mai', 'tối nay', 'cuối tuần'... sang ngày YYYY-MM-DD khi điền params.";
+    }
+
+    @Override
+    public void clearContextForUser(Integer userId) {
+        conversationContextService.clearContextForUser(userId);
     }
 }

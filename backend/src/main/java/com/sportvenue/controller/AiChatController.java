@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.DeleteMapping;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -49,13 +50,18 @@ public class AiChatController {
 
         Integer userId = userPrincipal != null ? userPrincipal.getUserId() : null;
         String sessionId = httpRequest.getHeader("X-Session-ID");
-        // Định danh dùng chung cho rate-limit (buộc theo userId nếu có, fallback session/IP)
+
+        // Rate-limit: theo userId (nếu login) hoặc session/IP (guest)
         String identity = userId != null ? "u:" + userId
                 : (sessionId != null && !sessionId.isBlank() ? "s:" + sessionId : "ip:" + getClientIp(httpRequest));
         String rateLimitKey = "ai_rate_limit:" + identity;
-        
-        // Định danh cho context cuộc trò chuyện: luôn ưu tiên sessionId để giữ context khi user login/logout
-        String conversationKey = (sessionId != null && !sessionId.isBlank()) ? "s:" + sessionId : identity;
+
+        // CRITICAL FIX: conversationKey DÙNG userId nếu login, fallback session cho guest.
+        // Dùng session cho guest để họ giữ được context trong phiên trình duyệt.
+        // Khi login → key đổi sang userId → KHÔNG bị trộn với context guest.
+        // Khi logout → key về guest/session → KHÔNG truy cập được context của user đã logout.
+        String conversationKey = userId != null ? "u:" + userId
+                : ((sessionId != null && !sessionId.isBlank()) ? "s:" + sessionId : "ip:" + getClientIp(httpRequest));
 
         BucketConfiguration bucketConfig = userId != null ? getCustomerConfig() : getGuestConfig();
         Bucket bucket = proxyManager.builder().build(rateLimitKey.getBytes(StandardCharsets.UTF_8), bucketConfig);
@@ -95,5 +101,17 @@ public class AiChatController {
             return xForwardedFor.split(",")[0].trim();
         }
         return request.getRemoteAddr();
+    }
+
+    @DeleteMapping("/chat/context")
+    public ResponseEntity<ApiResponse<Void>> clearContext(
+            @AuthenticationPrincipal UserPrincipal userPrincipal) {
+        if (userPrincipal != null && userPrincipal.getUserId() != null) {
+            aiChatService.clearContextForUser(userPrincipal.getUserId());
+        }
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .result(null)
+                .message("Context cleared")
+                .build());
     }
 }

@@ -142,11 +142,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) {
-        log.error("Unhandled exception: {}", ex.getMessage(), ex);
+        String msg = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
+        log.error("Unhandled exception [{}]: {}", ex.getClass().getSimpleName(), msg, ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ErrorResponse.of(
                         HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                        "Lỗi hệ thống: " + ex.getMessage()
+                        "Lỗi hệ thống: " + msg
                 ));
     }
 }

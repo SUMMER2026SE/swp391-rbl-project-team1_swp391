@@ -25,6 +25,7 @@ export function MatchResultCard({ match }: { match: MatchResponse }) {
     currentPlayers,
     pricePerPlayer,
     splitPrice,
+    isOwner,
   } = match;
 
   const formatTime = (timeStr: string) => {
@@ -66,10 +67,16 @@ export function MatchResultCard({ match }: { match: MatchResponse }) {
             <Badge className="border-0 bg-primary/95 text-[10px] px-2 py-0.5">
               {sportName}
             </Badge>
-            <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-medium">
-              <User className="h-3.5 w-3.5" />
-              <span>Chủ kèo: {hostName}</span>
-            </div>
+            {isOwner ? (
+              <Badge variant="outline" className="border-green-500 text-green-600 dark:text-green-400 text-[10px] px-2 py-0.5 gap-1">
+                Kèo của bạn
+              </Badge>
+            ) : (
+              <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-medium">
+                <User className="h-3.5 w-3.5" />
+                <span>Chủ kèo: {hostName}</span>
+              </div>
+            )}
           </div>
 
           <h4 className="text-sm font-semibold leading-snug line-clamp-1 group-hover:text-primary transition-colors mb-2">
@@ -115,9 +122,11 @@ export function MatchResultCard({ match }: { match: MatchResponse }) {
           <Button
             className="w-full rounded-lg font-semibold text-xs py-1.5 h-8"
             type="button"
-            onClick={handleJoinClick}
+            onClick={isOwner ? undefined : handleJoinClick}
+            disabled={isOwner}
+            variant={isOwner ? "secondary" : "default"}
           >
-            Tham gia ghép kèo
+            {isOwner ? "Đây là kèo của bạn" : "Tham gia ghép kèo"}
           </Button>
         </CardFooter>
       </Card>

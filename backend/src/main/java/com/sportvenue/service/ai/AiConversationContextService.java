@@ -321,5 +321,22 @@ public class AiConversationContextService {
             return Optional.empty();
         }
     }
+
+    /**
+     * Xóa conversation context của một user — dùng khi logout để invalidate context cũ.
+     * Safe: key không tồn tại thì không làm gì.
+     */
+    public void clearContextForUser(Integer userId) {
+        if (userId == null) {
+            return;
+        }
+        try {
+            String key = KEY_PREFIX + "u:" + userId;
+            Boolean deleted = redisTemplate.delete(key);
+            log.info("Cleared AI conversation context for userId={}, deleted={}", userId, deleted);
+        } catch (Exception e) {
+            log.warn("Không xóa được context cho userId {}: {}", userId, e.getMessage());
+        }
+    }
 }
 

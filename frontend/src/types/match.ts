@@ -19,4 +19,6 @@ export interface MatchResponse {
   matchingType?: string;
   cancelReason?: string;
   createdAt?: string;
+  /** true nếu user hiện tại là host của kèo này */
+  isOwner?: boolean;
 }

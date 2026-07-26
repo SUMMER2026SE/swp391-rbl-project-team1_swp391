@@ -43,9 +43,23 @@ export function DraftJoinMatchCard({
       setIsSuccess(true);
       toast.success("Yêu cầu tham gia kèo của bạn đã được gửi thành công.");
     } catch (error: any) {
-      toast.error(
-        error.response?.data?.message || "Đã xảy ra lỗi. Vui lòng thử lại sau.",
-      );
+      // error.response?.data?.message = BadRequestException message từ BE
+      // error.message = message đã được extract bởi axios interceptor (api.ts)
+      // error.status = HTTP status code
+      const serverMessage = error.response?.data?.message;
+      const axiosMessage = error.message;
+      const status = error.response?.status;
+
+      console.error("[DraftJoinMatchCard] Confirm join failed:", {
+        status,
+        serverMessage,
+        axiosMessage,
+        rawError: error,
+      });
+
+      // Ưu tiên: message từ BE > message từ interceptor > fallback
+      const displayMessage = serverMessage || axiosMessage || "Đã xảy ra lỗi khi xác nhận tham gia kèo. Vui lòng thử lại.";
+      toast.error(displayMessage);
     } finally {
       setIsJoining(false);
     }
