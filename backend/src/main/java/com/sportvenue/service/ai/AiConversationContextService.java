@@ -7,6 +7,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.connection.RedisConnection;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
@@ -67,6 +70,10 @@ public class AiConversationContextService {
         
         // Multi-Step Planning (Compound Task)
         private SubPlan subPlan;
+
+        // Optimistic locking version for SubPlan updates — prevents race conditions
+        // when 2 messages arrive simultaneously for the same conversationKey
+        private Long subPlanVersion;
     }
 
     public enum PlanStatus {
@@ -350,12 +357,91 @@ public class AiConversationContextService {
     // SubPlan Methods
     public void saveSubPlan(String conversationKey, SubPlan subPlan) {
         if (conversationKey == null) return;
-        ConversationContext ctx = load(conversationKey).orElse(new ConversationContext());
-        if (subPlan != null) {
-            subPlan.setExpiresAt(java.time.LocalDateTime.now().plus(TTL));
+        // Use optimistic locking for SubPlan updates to prevent race conditions
+        boolean saved = saveSubPlanOptimistic(conversationKey, subPlan);
+        if (!saved) {
+            log.warn("Optimistic lock conflict saving SubPlan for conversationKey={}, retrying once", conversationKey);
+            saved = saveSubPlanOptimistic(conversationKey, subPlan);
+            if (!saved) {
+                log.error("Failed to save SubPlan after retry for conversationKey={}", conversationKey);
+            }
         }
-        ctx.setSubPlan(subPlan);
-        save(conversationKey, ctx); // this resets the TTL for the whole context
+    }
+
+    /**
+     * Saves SubPlan using Redis WATCH/MULTI/EXEC for optimistic locking.
+     * Returns true if saved successfully, false if a version conflict was detected.
+     */
+    private boolean saveSubPlanOptimistic(String conversationKey, SubPlan subPlan) {
+        if (conversationKey == null) return false;
+
+        String redisKey = KEY_PREFIX + conversationKey;
+
+        try {
+            return redisTemplate.execute(new RedisCallback<Boolean>() {
+                @Override
+                public Boolean doInRedis(RedisConnection connection)
+                        throws DataAccessException {
+                    byte[] key = redisKey.getBytes();
+                    long maxRetries = 3;
+
+                    for (long attempt = 0; attempt < maxRetries; attempt++) {
+                        connection.watch(key);
+
+                        byte[] existing = connection.get(key);
+                        Long currentVersion = null;
+                        if (existing != null) {
+                            try {
+                                ConversationContext existingCtx = objectMapper.readValue(
+                                        new String(existing), ConversationContext.class);
+                                currentVersion = existingCtx.getSubPlanVersion();
+                            } catch (Exception e) {
+                                // New key or corrupt data — proceed with version 0
+                                currentVersion = 0L;
+                            }
+                        }
+
+                        // Build updated context
+                        ConversationContext ctx;
+                        if (existing != null) {
+                            try {
+                                ctx = objectMapper.readValue(new String(existing), ConversationContext.class);
+                            } catch (Exception e) {
+                                ctx = new ConversationContext();
+                            }
+                        } else {
+                            ctx = new ConversationContext();
+                        }
+
+                        ctx.setSubPlan(subPlan);
+                        ctx.setSubPlanVersion(currentVersion != null ? currentVersion + 1 : 1L);
+                        if (subPlan != null) {
+                            subPlan.setExpiresAt(java.time.LocalDateTime.now().plus(TTL));
+                        }
+
+                        String ctxJson;
+                        try {
+                            ctxJson = objectMapper.writeValueAsString(ctx);
+                        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                            return false;
+                        }
+                        connection.multi();
+                        connection.stringCommands().setEx(key, TTL.toSeconds(), ctxJson.getBytes());
+                        List<Object> results = connection.exec();
+
+                        if (results != null && !results.isEmpty()) {
+                            return true; // SUCCESS
+                        }
+                        // results == null → WATCH was triggered, retry
+                        log.debug("Optimistic lock conflict on attempt {} for key {}", attempt + 1, redisKey);
+                    }
+                    return false; // All retries exhausted
+                }
+            });
+        } catch (Exception e) {
+            log.warn("Error during optimistic SubPlan save for {}: {}", conversationKey, e.getMessage());
+            return false;
+        }
     }
 
     public Optional<SubPlan> getSubPlan(String conversationKey) {

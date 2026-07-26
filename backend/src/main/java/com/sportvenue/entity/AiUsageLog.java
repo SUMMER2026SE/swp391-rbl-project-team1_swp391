@@ -92,6 +92,18 @@ public class AiUsageLog {
     @Column(name = "handler_name", length = 100)
     private String handlerName;
 
+    @Column(name = "suggestion_type", length = 50)
+    private String suggestionType;
+
+    @Column(name = "sub_plan_steps")
+    private Integer subPlanSteps;
+
+    @Column(name = "sub_plan_completed")
+    private Integer subPlanCompleted;
+
+    @Column(name = "sub_plan_rolled_back")
+    private Boolean subPlanRolledBack = false;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
