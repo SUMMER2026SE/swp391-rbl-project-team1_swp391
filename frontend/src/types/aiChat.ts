@@ -84,4 +84,19 @@ export interface AiChatTurnResponse {
   matchId?: number | null;
   /** Thông tin kèo ghép nháp (intent: confirm_join_match) */
   draftJoinMatch?: DraftJoinMatchResponse | null;
+  /** Multi-step planning state */
+  subPlan?: SubPlanResponse | null;
+}
+
+export interface PlanStepResponse {
+  stepNumber: number;
+  description: string;
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "SKIPPED" | "FAILED" | "ROLLED_BACK";
+  errorReason?: string | null;
+}
+
+export interface SubPlanResponse {
+  steps: PlanStepResponse[];
+  currentStepIndex: number;
+  status: "PLANNING" | "IN_PROGRESS" | "PAUSED" | "COMPLETED" | "FAILED" | "ROLLED_BACK";
 }

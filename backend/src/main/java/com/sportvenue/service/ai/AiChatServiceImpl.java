@@ -62,6 +62,7 @@ public class AiChatServiceImpl implements AiChatService {
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
     private final PersonalizationPromptBuilder personalizationPromptBuilder;
     private final com.sportvenue.service.FeatureFlagService featureFlagService;
+    private final AiPlanningService aiPlanningService;
 
     @Value("${app.ai.model:llama-3.3-70b-versatile}")
     private String model;
@@ -379,23 +380,30 @@ public class AiChatServiceImpl implements AiChatService {
 
     private AiChatTurnResponse dispatch(ExtractedIntentResult result, String rawUserMessage, String conversationKey, Integer userId,
                                         Double userLat, Double userLng) {
+        // NEW: Check for active plan first
+        Optional<AiConversationContextService.SubPlan> activePlanOpt = conversationContextService.getSubPlan(conversationKey);
+        if (activePlanOpt.isPresent()) {
+            AiConversationContextService.SubPlan activePlan = activePlanOpt.get();
+            if (activePlan.getStatus() == AiConversationContextService.PlanStatus.IN_PROGRESS 
+                || activePlan.getStatus() == AiConversationContextService.PlanStatus.PAUSED
+                || activePlan.getStatus() == AiConversationContextService.PlanStatus.PLANNING) {
+                return handleSubPlanTurn(result, rawUserMessage, activePlan, userId, conversationKey, userLat, userLng);
+            }
+        }
+
         String intent = result.getIntent();
         String message = result.getMessage();
 
-        // CRITICAL FIX: Nếu đang trong confirm flow của cancel, LUÔN route vào CancelBookingHandler
-        // bất kể LLM trả về intent gì (LLM có thể hiểu sai "có" thành need_more_info)
+        // NEW: Route compound_task to planner
+        if ("compound_task".equals(intent) && featureFlagService.isCompoundTask()) {
+            return handleCompoundTask(rawUserMessage, conversationKey, userId);
+        }
+
         if (conversationContextService.isAwaitingCancelConfirmation(conversationKey)) {
             log.info("FORCE ROUTE to cancel_booking handler: isAwaitingCancelConfirmation=true (LLM intent was '{}')", intent);
             return cancelBookingHandler.handle(result.getParams(), rawUserMessage, userId, conversationKey);
         }
 
-        // DEFENSIVE FIX: Nếu LLM trả về need_more_info/nhầm intent MÀ message là confirm keyword,
-        // thử lấy pending booking từ lastShownBookings (Redis có thể chưa kịp persist).
-        // Trường hợp: "Có" nhưng isAwaitingCancelConfirmation=false do Redis race condition — ở đây
-        // flag đó đã chắc chắn false (nhánh isAwaitingCancelConfirmation=true đã return ở trên), nên
-        // conversationKeyServiceHasValidState() lúc này chỉ còn ý nghĩa "có lastShownBookings hay
-        // không". Trước đây bị phủ định (!) khiến điều kiện luôn kéo theo lastShownBookings rỗng —
-        // vô hiệu hóa chính nhánh fallback đang muốn dùng lastShownBookings để resolve.
         if (isLikelyConfirmMessage(rawUserMessage) && conversationKeyServiceHasValidState(conversationKey)) {
             log.info("DEFENSIVE: Message looks like confirmation but Redis state missing. Attempting to resolve from lastShownBookings.");
             Optional<Integer> lastBookingId = conversationContextService.resolveLastBookingId(conversationKey);
@@ -602,5 +610,107 @@ public class AiChatServiceImpl implements AiChatService {
         return "Bây giờ là " + now.format(DateTimeFormatter.ofPattern("HH:mm"))
                 + " " + dayOfWeekVi + ", ngày " + today.format(DateTimeFormatter.ISO_LOCAL_DATE)
                 + " (giờ Việt Nam). Hãy dùng mốc này để quy đổi 'hôm nay', 'ngày mai', 'tối nay', 'cuối tuần'... sang ngày YYYY-MM-DD khi điền params.";
+    }
+
+    private AiChatTurnResponse handleCompoundTask(String rawUserMessage, String conversationKey, Integer userId) {
+        Optional<AiConversationContextService.SubPlan> subPlanOpt = aiPlanningService.decompose(rawUserMessage, userId, conversationKey);
+        
+        if (subPlanOpt.isEmpty() || subPlanOpt.get().getSteps() == null || subPlanOpt.get().getSteps().isEmpty()) {
+            return AiChatTurnResponse.messageOnly("Xin lỗi, tôi không thể phân tích yêu cầu này thành các bước. Vui lòng thử lại với yêu cầu đơn giản hơn.", "error");
+        }
+        
+        AiConversationContextService.SubPlan subPlan = subPlanOpt.get();
+        subPlan.setStatus(AiConversationContextService.PlanStatus.IN_PROGRESS);
+        conversationContextService.saveSubPlan(conversationKey, subPlan);
+        
+        AiChatTurnResponse response = AiChatTurnResponse.builder()
+                .message("Tôi đã lên kế hoạch xử lý yêu cầu của bạn. Vui lòng kiểm tra các bước bên dưới.")
+                .intent("compound_task")
+                .subPlan(mapToResponse(subPlan))
+                .build();
+                
+        return response;
+    }
+
+    private AiChatTurnResponse handleSubPlanTurn(ExtractedIntentResult result, String rawUserMessage, AiConversationContextService.SubPlan activePlan, Integer userId, String conversationKey, Double userLat, Double userLng) {
+        String message = rawUserMessage.toLowerCase(Locale.ROOT).trim();
+        
+        if (message.equals("hủy") || message.equals("cancel") || message.equals("không")) {
+            // Cancel plan
+            activePlan.setStatus(AiConversationContextService.PlanStatus.FAILED);
+            conversationContextService.saveSubPlan(conversationKey, activePlan);
+            
+            // Rollback if any bookings were made
+            aiPlanningService.rollbackFrom(conversationKey, activePlan.getCurrentStepIndex(), userId);
+            
+            return AiChatTurnResponse.builder()
+                    .message("Đã hủy bỏ kế hoạch.")
+                    .intent("compound_task_cancelled")
+                    .subPlan(mapToResponse(activePlan))
+                    .build();
+        }
+        
+        if (activePlan.getCurrentStepIndex() >= activePlan.getSteps().size()) {
+            activePlan.setStatus(AiConversationContextService.PlanStatus.COMPLETED);
+            conversationContextService.saveSubPlan(conversationKey, activePlan);
+            return AiChatTurnResponse.builder()
+                    .message("Kế hoạch đã hoàn thành toàn bộ!")
+                    .intent("compound_task_completed")
+                    .subPlan(mapToResponse(activePlan))
+                    .build();
+        }
+        
+        AiConversationContextService.PlanStep currentStep = activePlan.getSteps().get(activePlan.getCurrentStepIndex());
+        
+        // Execute current step
+        AiChatTurnResponse stepResponse = aiPlanningService.executeStep(currentStep, userId, conversationKey, rawUserMessage, userLat, userLng);
+        
+        // Update plan state
+        if (currentStep.getStatus() == AiConversationContextService.StepStatus.FAILED) {
+            activePlan.setStatus(AiConversationContextService.PlanStatus.PAUSED);
+        } else {
+            // Mark step completed, advance index
+            currentStep.setStatus(AiConversationContextService.StepStatus.COMPLETED);
+            
+            AiConversationContextService.StepResult stepResult = AiConversationContextService.StepResult.builder()
+                    .stepNumber(currentStep.getStepNumber())
+                    .intent(currentStep.getIntent())
+                    .success(true)
+                    .data(stepResponse.getBookingId() != null ? stepResponse.getBookingId() : stepResponse.getMatchId())
+                    .build();
+            
+            activePlan.getCompletedSteps().add(stepResult);
+            activePlan.setCurrentStepIndex(activePlan.getCurrentStepIndex() + 1);
+            
+            if (activePlan.getCurrentStepIndex() >= activePlan.getSteps().size()) {
+                activePlan.setStatus(AiConversationContextService.PlanStatus.COMPLETED);
+            }
+        }
+        
+        conversationContextService.saveSubPlan(conversationKey, activePlan);
+        
+        // Attach subPlan to response
+        stepResponse.setSubPlan(mapToResponse(activePlan));
+        return stepResponse;
+    }
+
+    private com.sportvenue.dto.response.SubPlanResponse mapToResponse(AiConversationContextService.SubPlan subPlan) {
+        if (subPlan == null) return null;
+        List<com.sportvenue.dto.response.PlanStepResponse> stepResponses = new ArrayList<>();
+        if (subPlan.getSteps() != null) {
+            for (AiConversationContextService.PlanStep s : subPlan.getSteps()) {
+                stepResponses.add(com.sportvenue.dto.response.PlanStepResponse.builder()
+                        .stepNumber(s.getStepNumber())
+                        .description(s.getDescription())
+                        .status(s.getStatus().name())
+                        .errorReason(s.getErrorReason())
+                        .build());
+            }
+        }
+        return com.sportvenue.dto.response.SubPlanResponse.builder()
+                .steps(stepResponses)
+                .currentStepIndex(subPlan.getCurrentStepIndex())
+                .status(subPlan.getStatus().name())
+                .build();
     }
 }

@@ -2,6 +2,7 @@ package com.sportvenue.service.ai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
@@ -63,6 +64,54 @@ public class AiConversationContextService {
         private String currentTime;
         private java.util.Map<String, Object> bookingDraft;
         private java.util.Map<String, Object> joinMatchDraft;
+        
+        // Multi-Step Planning (Compound Task)
+        private SubPlan subPlan;
+    }
+
+    public enum PlanStatus {
+        PLANNING, IN_PROGRESS, PAUSED, COMPLETED, FAILED, ROLLED_BACK
+    }
+
+    public enum StepStatus {
+        PENDING, IN_PROGRESS, COMPLETED, SKIPPED, FAILED, ROLLED_BACK
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class StepResult {
+        private int stepNumber;
+        private String intent;
+        private boolean success;
+        private String message;
+        private Object data; // Could store bookingId, matchId etc for rollback
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class PlanStep {
+        private int stepNumber;
+        private String description;
+        private String intent;
+        private com.fasterxml.jackson.databind.JsonNode params;
+        private StepStatus status = StepStatus.PENDING;
+        private String errorReason;
+    }
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class SubPlan {
+        private List<PlanStep> steps;
+        private int currentStepIndex;
+        private PlanStatus status = PlanStatus.PLANNING;
+        private List<StepResult> completedSteps;
+        private java.time.LocalDateTime expiresAt;
     }
 
     public void saveLastShownStadiums(String conversationKey, List<Integer> stadiumIds) {
@@ -290,6 +339,37 @@ public class AiConversationContextService {
                 .map(ctx -> ctx.getBookingDraft() != null && !ctx.getBookingDraft().isEmpty())
                 .orElse(false);
     }
+
+    public void deleteJoinMatchDraft(String conversationKey) {
+        if (conversationKey == null) return;
+        ConversationContext ctx = load(conversationKey).orElse(new ConversationContext());
+        ctx.setJoinMatchDraft(null);
+        save(conversationKey, ctx);
+    }
+    
+    // SubPlan Methods
+    public void saveSubPlan(String conversationKey, SubPlan subPlan) {
+        if (conversationKey == null) return;
+        ConversationContext ctx = load(conversationKey).orElse(new ConversationContext());
+        if (subPlan != null) {
+            subPlan.setExpiresAt(java.time.LocalDateTime.now().plus(TTL));
+        }
+        ctx.setSubPlan(subPlan);
+        save(conversationKey, ctx); // this resets the TTL for the whole context
+    }
+
+    public Optional<SubPlan> getSubPlan(String conversationKey) {
+        return load(conversationKey).map(ConversationContext::getSubPlan)
+                .filter(plan -> plan.getExpiresAt() == null || plan.getExpiresAt().isAfter(java.time.LocalDateTime.now()));
+    }
+
+    public void deleteSubPlan(String conversationKey) {
+        if (conversationKey == null) return;
+        ConversationContext ctx = load(conversationKey).orElse(new ConversationContext());
+        ctx.setSubPlan(null);
+        save(conversationKey, ctx);
+    }
+
 
     public void clearBookingDraft(String conversationKey) {
         if (conversationKey == null) {

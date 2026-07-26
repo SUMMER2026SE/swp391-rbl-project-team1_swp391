@@ -12,10 +12,13 @@ import { StadiumResultCard } from "@/components/ai-assistant/StadiumResultCard";
 import { SlotResultCard } from "@/components/ai-assistant/SlotResultCard";
 import { MatchResultCard } from "@/components/ai-assistant/MatchResultCard";
 import { DraftJoinMatchCard } from "@/components/ai-assistant/DraftJoinMatchCard";
+import { SubPlanProgressCard } from "@/components/ai-assistant/SubPlanProgressCard";
+import { PlanCompletionCard } from "@/components/ai-assistant/PlanCompletionCard";
 
 interface ChatMessageProps {
   msg: MessageItem;
   isLatest: boolean;
+  onSend?: (message: string) => void;
 }
 
 /** Map booking status code → label + color */
@@ -114,7 +117,7 @@ function BookingCard({ booking }: { booking: BookingAiResponse }) {
   );
 }
 
-export function ChatMessageItem({ msg, isLatest }: ChatMessageProps) {
+export function ChatMessageItem({ msg, isLatest, onSend }: ChatMessageProps) {
   const isAssistant = msg.type === "assistant";
   // Chỉ chạy typewriter nếu là tin nhắn AI mới nhất VÀ không phải load từ lịch sử
   const shouldAnimate = isAssistant && isLatest && !msg.isHistory;
@@ -274,6 +277,21 @@ export function ChatMessageItem({ msg, isLatest }: ChatMessageProps) {
             {/* Draft Join Match Card */}
             {msg.draftJoinMatch && (
               <DraftJoinMatchCard draftJoinMatch={msg.draftJoinMatch} />
+            )}
+
+            {/* SubPlan Progress Card — shown while plan is active */}
+            {msg.subPlan && msg.subPlan.status !== "COMPLETED" && msg.subPlan.status !== "ROLLED_BACK" && (
+              <SubPlanProgressCard
+                subPlan={msg.subPlan}
+                isLatestMessage={isLatest}
+                onNextStep={() => onSend?.("Tiếp tục")}
+                onCancel={() => onSend?.("Hủy")}
+              />
+            )}
+
+            {/* Plan Completion Card — shown once all steps done */}
+            {msg.subPlan && msg.subPlan.status === "COMPLETED" && (
+              <PlanCompletionCard subPlan={msg.subPlan} />
             )}
           </div>
         )}
