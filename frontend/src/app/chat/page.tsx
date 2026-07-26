@@ -17,7 +17,10 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { toast } from "sonner"
+import { useConfirm } from "@/hooks/useConfirm"
+import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import {
   getConversations, getMessages, sendMessage, markConversationAsRead,
   getUnreadCount, searchUsers, renameGroupChat, blockUser, unblockUser,
@@ -32,9 +35,9 @@ function formatRelativeTime(dateStr: string | null | undefined): string {
   const diffMs = now.getTime() - d.getTime()
   const diffMins = Math.floor(diffMs / 60000)
   if (diffMins < 1) return 'vừa xong'
-  if (diffMins < 60) return `${diffMins} phút trước`
-  if (diffMins < 24 * 60) return `${Math.floor(diffMins / 60)} giờ trước`
-  if (diffMins < 7 * 24 * 60) return `${Math.floor(diffMins / (24 * 60))} ngày trước`
+  if (diffMins < 60) return `${diffMins} phút`
+  if (diffMins < 24 * 60) return `${Math.floor(diffMins / 60)} giờ`
+  if (diffMins < 7 * 24 * 60) return `${Math.floor(diffMins / (24 * 60))} ngày`
   return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })
 }
 
@@ -108,6 +111,11 @@ function ChatPage() {
   const [totalUnread, setTotalUnread] = useState(0)
   const [typingUsers, setTypingUsers] = useState<Map<number, string>>(new Map())
   const [showMobileChat, setShowMobileChat] = useState(false)
+
+  const confirmState = useConfirm()
+  const [renameModalOpen, setRenameModalOpen] = useState(false)
+  const [renameInput, setRenameInput] = useState("")
+  const [renaming, setRenaming] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
@@ -386,14 +394,14 @@ function ChatPage() {
       const error = err as { message?: string; status?: number };
       const errorMsg = error?.message || "Lỗi không xác định";
       if (errorMsg.includes("BLOCKED")) {
-        alert("Không thể gửi tin nhắn: Bạn hoặc người dùng này đang bị chặn.");
+        toast.error("Không thể gửi tin nhắn: Bạn hoặc người dùng này đang bị chặn.");
         // Revert UI to blocked state to allow them to unblock properly
         setConversations(prev => prev.map(c => 
           c.otherUserId === selectedConv.otherUserId ? { ...c, blocked: true } : c
         ));
         setSelectedConv(prev => prev ? { ...prev, blocked: true } : prev);
       } else {
-        alert("Lỗi khi gửi tin nhắn: " + errorMsg);
+        toast.error("Lỗi khi gửi tin nhắn: " + errorMsg);
       }
     } finally { 
       setSendingMessage(false) 
@@ -496,24 +504,28 @@ function ChatPage() {
 
                 return (
                 <button key={(conv.otherUserId || conv.conversationId) + '-' + i} onClick={() => selectConversation(conv)}
-                  className={`w-full p-3.5 flex gap-3 hover:bg-muted/60 transition-all duration-150 ${selectedConv?.conversationId === conv.conversationId ? 'bg-primary/5 border-l-2 border-l-primary' : 'border-l-2 border-l-transparent'}`}>
-                  <div className="relative flex-shrink-0">
-                    <Avatar className="h-12 w-12">
+                  className={`w-full px-3 py-3 flex gap-2.5 items-center hover:bg-muted/60 transition-all duration-150 ${selectedConv?.conversationId === conv.conversationId ? 'bg-primary/5 border-l-2 border-l-primary' : 'border-l-2 border-l-transparent'}`}>
+                  <div className="relative shrink-0">
+                    <Avatar className="h-11 w-11">
                       <AvatarImage src={conv.otherUserAvatar || undefined} />
                       <AvatarFallback className={conv.isGroup ? "bg-emerald-100 text-emerald-600" : "bg-primary/10 text-primary font-semibold text-sm"}>
                         {conv.isGroup ? <Users className="h-5 w-5" /> : (conv.otherUserName?.[0]?.toUpperCase() || '?')}
                       </AvatarFallback>
                     </Avatar>
-                    {conv.otherUserOnline && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-card" />}
+                    {conv.otherUserOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-card" />}
                   </div>
-                  <div className="flex-1 text-left min-w-0 flex flex-col justify-center">
-                    <div className="flex items-center justify-between mb-1">
-                      <h4 className="text-sm font-semibold truncate">{conv.otherUserName}</h4>
-                      {conv.lastMessageAt && <span className="text-[11px] text-muted-foreground flex-shrink-0 ml-2">{formatRelativeTime(conv.lastMessageAt)}</span>}
+                  <div className="flex-1 min-w-0 pr-1 text-left flex flex-col justify-center">
+                    <div className="flex items-center justify-between gap-2 mb-1 min-w-0">
+                      <h4 className="text-sm font-semibold truncate min-w-0 flex-1">{conv.otherUserName}</h4>
+                      {conv.lastMessageAt && (
+                        <span className="text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">
+                          {formatRelativeTime(conv.lastMessageAt)}
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center justify-between">
-                      <p className={`text-xs truncate pr-2 ${displayUnread > 0 ? 'text-foreground font-bold' : 'text-muted-foreground'}`}>{formatMessagePreview(conv.lastMessagePreview) || 'Bắt đầu trò chuyện...'}</p>
-                      {displayUnread > 0 && <span className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0">{displayUnread}</span>}
+                    <div className="flex items-center justify-between min-w-0 gap-2">
+                      <p className={`text-xs truncate pr-1 flex-1 min-w-0 ${displayUnread > 0 ? 'text-foreground font-bold' : 'text-muted-foreground'}`}>{formatMessagePreview(conv.lastMessagePreview) || 'Bắt đầu trò chuyện...'}</p>
+                      {displayUnread > 0 && <span className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0">{displayUnread}</span>}
                     </div>
                   </div>
                 </button>
@@ -527,11 +539,11 @@ function ChatPage() {
               <>
                 {/* Chat Header */}
                 <div className="shrink-0 px-4 py-3 border-b flex items-center justify-between bg-card/80 backdrop-blur-sm">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <Button variant="ghost" size="sm" className="md:hidden h-8 w-8 p-0" onClick={() => setShowMobileChat(false)}>
                       <ArrowLeft className="h-5 w-5" />
                     </Button>
-                    <div className="relative">
+                    <div className="relative shrink-0">
                       <Avatar className="h-10 w-10">
                         <AvatarImage src={selectedConv.otherUserAvatar || undefined} />
                         <AvatarFallback className={selectedConv.isGroup ? "bg-emerald-100 text-emerald-600" : "bg-primary/10 text-primary font-semibold"}>
@@ -540,9 +552,9 @@ function ChatPage() {
                       </Avatar>
                       {selectedConv.otherUserOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-card" />}
                     </div>
-                    <div>
-                      <h3 className="text-sm font-semibold">{selectedConv.otherUserName}</h3>
-                      <p className="text-xs text-muted-foreground">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-semibold truncate">{selectedConv.otherUserName}</h3>
+                      <p className="text-xs text-muted-foreground truncate">
                         {isTypingForSelected ? <span className="text-primary animate-pulse">Đang nhập...</span> : selectedConv.isGroup ? 'Nhóm trò chuyện' : selectedConv.otherUserOnline ? 'Đang hoạt động' : ''}
                       </p>
                     </div>
@@ -579,94 +591,89 @@ function ChatPage() {
                         {selectedConv?.conversationId && unreadOverrides[selectedConv.conversationId] ? 'Đánh dấu là đã đọc' : 'Đánh dấu là chưa đọc'}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem className="cursor-pointer" onClick={async () => {
+                      <DropdownMenuItem className="cursor-pointer" onClick={() => {
                         if (selectedConv?.conversationId) {
-                          const isGroup = selectedConv.isGroup;
-                          const promptMsg = isGroup ? 'Nhập tên nhóm mới:' : 'Nhập biệt danh mới cho người này (chỉ mình bạn thấy):';
-                          const newName = window.prompt(promptMsg, selectedConv.otherUserName || '');
-                          if (newName !== null && newName.trim() !== '' && newName.trim() !== selectedConv.otherUserName) {
-                            try {
-                              await renameGroupChat(selectedConv.conversationId, newName.trim());
-                              setConversations(prev => prev.map(c =>
-                                c.conversationId === selectedConv.conversationId ? { ...c, otherUserName: newName.trim() } : c
-                              ))
-                              setSelectedConv(prev => prev ? { ...prev, otherUserName: newName.trim() } : prev)
-                            } catch (err: any) {
-                              const isNetworkError = !err.response && err.message?.includes('Network');
-                              if (isNetworkError) {
-                                alert("Lỗi mạng: Không thể kết nối đến máy chủ. Vui lòng kiểm tra xem Backend đã chạy chưa.");
-                              } else {
-                                alert(isGroup ? "Không thể đổi tên nhóm. Bạn có thể không phải là thành viên của nhóm này." : "Không thể đặt biệt danh. Vui lòng thử lại sau.");
-                              }
-                            }
-                          }
+                          setRenameInput(selectedConv.otherUserName || '')
+                          setRenameModalOpen(true)
                         }
                       }}>
                         <Edit3 className="h-4 w-4 mr-2" /> {selectedConv?.isGroup ? 'Đổi tên nhóm' : 'Đổi biệt danh'}
                       </DropdownMenuItem>
                       {!selectedConv?.isGroup && (
                         selectedConv?.blocked ? (
-                          <DropdownMenuItem className="cursor-pointer text-primary focus:text-primary" onClick={async () => {
+                          <DropdownMenuItem className="cursor-pointer text-primary focus:text-primary" onClick={() => {
                             if (selectedConv?.otherUserId) {
-                              if (!window.confirm(`Bạn có chắc chắn muốn bỏ chặn ${selectedConv.otherUserName || 'người dùng này'}?`)) return;
                               const targetUserId = selectedConv.otherUserId;
-                              // Optimistic update
-                              setConversations(prev => prev.map(c =>
-                                c.otherUserId === targetUserId ? { ...c, blocked: false } : c
-                              ))
-                              setSelectedConv(prev => prev ? { ...prev, blocked: false } : prev)
+                              confirmState.confirm({
+                                title: "Bỏ chặn người dùng",
+                                description: `Bạn có chắc chắn muốn bỏ chặn ${selectedConv.otherUserName || 'người dùng này'}?`,
+                                confirmText: "Bỏ chặn",
+                                variant: "default",
+                                onConfirm: async () => {
+                                  setConversations(prev => prev.map(c =>
+                                    c.otherUserId === targetUserId ? { ...c, blocked: false } : c
+                                  ))
+                                  setSelectedConv(prev => prev ? { ...prev, blocked: false } : prev)
 
-                              try {
-                                const status = await unblockUser(targetUserId)
-                                setConversations(prev => prev.map(c =>
-                                  c.otherUserId === targetUserId
-                                    ? { ...c, blocked: status.blocked, blockedByThem: status.blockedByThem }
-                                    : c
-                                ))
-                                setSelectedConv(prev => prev?.otherUserId === targetUserId
-                                  ? { ...prev, blocked: status.blocked, blockedByThem: status.blockedByThem }
-                                  : prev)
-                              } catch (err) {
-                                // Revert on failure
-                                setConversations(prev => prev.map(c =>
-                                  c.otherUserId === targetUserId ? { ...c, blocked: true } : c
-                                ))
-                                setSelectedConv(prev => prev ? { ...prev, blocked: true } : prev)
-                                alert("Không thể bỏ chặn người dùng này. Vui lòng thử lại sau.")
-                              }
+                                  try {
+                                    const status = await unblockUser(targetUserId)
+                                    setConversations(prev => prev.map(c =>
+                                      c.otherUserId === targetUserId
+                                        ? { ...c, blocked: status.blocked, blockedByThem: status.blockedByThem }
+                                        : c
+                                    ))
+                                    setSelectedConv(prev => prev?.otherUserId === targetUserId
+                                      ? { ...prev, blocked: status.blocked, blockedByThem: status.blockedByThem }
+                                      : prev)
+                                    toast.success("Đã bỏ chặn người dùng")
+                                  } catch (err) {
+                                    setConversations(prev => prev.map(c =>
+                                      c.otherUserId === targetUserId ? { ...c, blocked: true } : c
+                                    ))
+                                    setSelectedConv(prev => prev ? { ...prev, blocked: true } : prev)
+                                    toast.error("Không thể bỏ chặn người dùng này. Vui lòng thử lại sau.")
+                                  }
+                                }
+                              })
                             }
                           }}>
                             <Ban className="h-4 w-4 mr-2" /> Bỏ chặn người dùng
                           </DropdownMenuItem>
                         ) : (
-                          <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={async () => {
+                          <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={() => {
                             if (selectedConv?.otherUserId) {
-                              if (!window.confirm(`Bạn có chắc chắn muốn chặn ${selectedConv.otherUserName || 'người dùng này'}?`)) return;
                               const targetUserId = selectedConv.otherUserId;
-                              // Optimistic update
-                              setConversations(prev => prev.map(c =>
-                                c.otherUserId === targetUserId ? { ...c, blocked: true } : c
-                              ))
-                              setSelectedConv(prev => prev ? { ...prev, blocked: true } : prev)
+                              confirmState.confirm({
+                                title: "Chặn người dùng",
+                                description: `Bạn có chắc chắn muốn chặn ${selectedConv.otherUserName || 'người dùng này'}? Người này sẽ không thể gửi tin nhắn cho bạn.`,
+                                confirmText: "Chặn",
+                                variant: "destructive",
+                                onConfirm: async () => {
+                                  setConversations(prev => prev.map(c =>
+                                    c.otherUserId === targetUserId ? { ...c, blocked: true } : c
+                                  ))
+                                  setSelectedConv(prev => prev ? { ...prev, blocked: true } : prev)
 
-                              try {
-                                const status = await blockUser(targetUserId)
-                                setConversations(prev => prev.map(c =>
-                                  c.otherUserId === targetUserId
-                                    ? { ...c, blocked: status.blocked, blockedByThem: status.blockedByThem }
-                                    : c
-                                ))
-                                setSelectedConv(prev => prev?.otherUserId === targetUserId
-                                  ? { ...prev, blocked: status.blocked, blockedByThem: status.blockedByThem }
-                                  : prev)
-                              } catch (err) {
-                                // Revert on failure
-                                setConversations(prev => prev.map(c =>
-                                  c.otherUserId === targetUserId ? { ...c, blocked: false } : c
-                                ))
-                                setSelectedConv(prev => prev ? { ...prev, blocked: false } : prev)
-                                alert("Không thể chặn người dùng này. Vui lòng thử lại sau.")
-                              }
+                                  try {
+                                    const status = await blockUser(targetUserId)
+                                    setConversations(prev => prev.map(c =>
+                                      c.otherUserId === targetUserId
+                                        ? { ...c, blocked: status.blocked, blockedByThem: status.blockedByThem }
+                                        : c
+                                    ))
+                                    setSelectedConv(prev => prev?.otherUserId === targetUserId
+                                      ? { ...prev, blocked: status.blocked, blockedByThem: status.blockedByThem }
+                                      : prev)
+                                    toast.success("Đã chặn người dùng")
+                                  } catch (err) {
+                                    setConversations(prev => prev.map(c =>
+                                      c.otherUserId === targetUserId ? { ...c, blocked: false } : c
+                                    ))
+                                    setSelectedConv(prev => prev ? { ...prev, blocked: false } : prev)
+                                    toast.error("Không thể chặn người dùng này. Vui lòng thử lại sau.")
+                                  }
+                                }
+                              })
                             }
                           }}>
                             <Ban className="h-4 w-4 mr-2" /> Chặn người dùng
@@ -674,16 +681,25 @@ function ChatPage() {
                         )
                       )}
                       {selectedConv?.isGroup && (
-                        <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={async () => {
+                        <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive" onClick={() => {
                           if (selectedConv?.conversationId) {
-                            if (!window.confirm(`Bạn có chắc chắn muốn rời khỏi nhóm ${selectedConv.otherUserName}?`)) return;
-                            try {
-                              await leaveGroupChat(selectedConv.conversationId)
-                              setConversations(prev => prev.filter(c => c.conversationId !== selectedConv.conversationId))
-                              setSelectedConv(null)
-                            } catch {
-                              alert("Không thể rời khỏi nhóm. Vui lòng thử lại sau.")
-                            }
+                            const convId = selectedConv.conversationId;
+                            confirmState.confirm({
+                              title: "Rời khỏi nhóm",
+                              description: `Bạn có chắc chắn muốn rời khỏi nhóm ${selectedConv.otherUserName}?`,
+                              confirmText: "Rời nhóm",
+                              variant: "destructive",
+                              onConfirm: async () => {
+                                try {
+                                  await leaveGroupChat(convId)
+                                  setConversations(prev => prev.filter(c => c.conversationId !== convId))
+                                  setSelectedConv(null)
+                                  toast.success("Đã rời khỏi nhóm")
+                                } catch {
+                                  toast.error("Không thể rời khỏi nhóm. Vui lòng thử lại sau.")
+                                }
+                              }
+                            })
                           }
                         }}>
                           <LogOut className="h-4 w-4 mr-2" /> Rời khỏi nhóm
@@ -1070,6 +1086,96 @@ function ChatPage() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Modal Đổi tên nhóm / đặt biệt danh */}
+      <Dialog open={renameModalOpen} onOpenChange={setRenameModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>{selectedConv?.isGroup ? 'Đổi tên nhóm' : 'Đặt biệt danh'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-xs text-muted-foreground">
+              {selectedConv?.isGroup
+                ? 'Nhập tên nhóm mới để áp dụng cho tất cả thành viên.'
+                : 'Nhập biệt danh mới cho người này (chỉ bạn mới thấy biệt danh này).'}
+            </p>
+            <Input
+              value={renameInput}
+              onChange={(e) => setRenameInput(e.target.value)}
+              placeholder="Nhập tên mới..."
+              onKeyDown={async (e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  if (!selectedConv?.conversationId || !renameInput.trim()) return
+                  const isGroup = selectedConv.isGroup
+                  try {
+                    setRenaming(true)
+                    await renameGroupChat(selectedConv.conversationId, renameInput.trim())
+                    setConversations(prev => prev.map(c =>
+                      c.conversationId === selectedConv.conversationId ? { ...c, otherUserName: renameInput.trim() } : c
+                    ))
+                    setSelectedConv(prev => prev ? { ...prev, otherUserName: renameInput.trim() } : prev)
+                    setRenameModalOpen(false)
+                    toast.success(isGroup ? "Đã đổi tên nhóm thành công" : "Đã cập nhật biệt danh thành công")
+                  } catch (err: any) {
+                    const isNetworkError = !err.response && err.message?.includes('Network')
+                    if (isNetworkError) {
+                      toast.error("Lỗi mạng: Không thể kết nối đến máy chủ. Vui lòng kiểm tra xem Backend đã chạy chưa.")
+                    } else {
+                      toast.error(isGroup ? "Không thể đổi tên nhóm. Bạn có thể không phải là thành viên của nhóm này." : "Không thể đặt biệt danh. Vui lòng thử lại sau.")
+                    }
+                  } finally {
+                    setRenaming(false)
+                  }
+                }
+              }}
+            />
+          </div>
+          <DialogFooter className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setRenameModalOpen(false)} disabled={renaming}>
+              Hủy
+            </Button>
+            <Button onClick={async () => {
+              if (!selectedConv?.conversationId || !renameInput.trim()) return
+              const isGroup = selectedConv.isGroup
+              try {
+                setRenaming(true)
+                await renameGroupChat(selectedConv.conversationId, renameInput.trim())
+                setConversations(prev => prev.map(c =>
+                  c.conversationId === selectedConv.conversationId ? { ...c, otherUserName: renameInput.trim() } : c
+                ))
+                setSelectedConv(prev => prev ? { ...prev, otherUserName: renameInput.trim() } : prev)
+                setRenameModalOpen(false)
+                toast.success(isGroup ? "Đã đổi tên nhóm thành công" : "Đã cập nhật biệt danh thành công")
+              } catch (err: any) {
+                const isNetworkError = !err.response && err.message?.includes('Network')
+                if (isNetworkError) {
+                  toast.error("Lỗi mạng: Không thể kết nối đến máy chủ. Vui lòng kiểm tra xem Backend đã chạy chưa.")
+                } else {
+                  toast.error(isGroup ? "Không thể đổi tên nhóm. Bạn có thể không phải là thành viên của nhóm này." : "Không thể đặt biệt danh. Vui lòng thử lại sau.")
+                }
+              } finally {
+                setRenaming(false)
+              }
+            }} disabled={renaming || !renameInput.trim()}>
+              {renaming && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Lưu
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ConfirmDialog cho Chặn, Bỏ chặn, Rời nhóm */}
+      <ConfirmDialog
+        isOpen={confirmState.isOpen}
+        onClose={confirmState.close}
+        onConfirm={confirmState.execute}
+        title={confirmState.options?.title || ""}
+        description={confirmState.options?.description || ""}
+        confirmText={confirmState.options?.confirmText}
+        cancelText={confirmState.options?.cancelText}
+        variant={confirmState.options?.variant}
+        isLoading={confirmState.isLoading}
+      />
     </div>
   )
 }

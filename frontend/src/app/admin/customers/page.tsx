@@ -36,6 +36,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useDebounceValue } from "usehooks-ts";
+import { useConfirm } from "@/hooks/useConfirm";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 
 
 export interface AdminCustomerResponse {
@@ -160,13 +162,21 @@ function AdminCustomersContent() {
     }
   });
 
+  const confirmState = useConfirm();
+
   const handleLockUnlock = (customer: AdminCustomerResponse) => {
     const isCurrentlyActive = customer.accountStatus === "ACTIVE";
     const action = isCurrentlyActive ? "khóa" : "mở khóa";
-    
-    if (confirm(`Bạn có chắc chắn muốn ${action} tài khoản ${customer.email}?`)) {
-      lockUnlockMutation.mutate({ id: customer.userId, enabled: !isCurrentlyActive });
-    }
+
+    confirmState.confirm({
+      title: `Xác nhận ${action} tài khoản`,
+      description: `Bạn có chắc chắn muốn ${action} tài khoản ${customer.email}?`,
+      confirmText: isCurrentlyActive ? "Khóa tài khoản" : "Mở khóa",
+      variant: isCurrentlyActive ? "destructive" : "default",
+      onConfirm: async () => {
+        await lockUnlockMutation.mutateAsync({ id: customer.userId, enabled: !isCurrentlyActive });
+      },
+    });
   };
 
   return (
@@ -351,6 +361,18 @@ function AdminCustomersContent() {
           </Button>
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={confirmState.isOpen}
+        onClose={confirmState.close}
+        onConfirm={confirmState.execute}
+        title={confirmState.options?.title || ""}
+        description={confirmState.options?.description || ""}
+        confirmText={confirmState.options?.confirmText}
+        cancelText={confirmState.options?.cancelText}
+        variant={confirmState.options?.variant}
+        isLoading={confirmState.isLoading}
+      />
     </div>
   );
 }

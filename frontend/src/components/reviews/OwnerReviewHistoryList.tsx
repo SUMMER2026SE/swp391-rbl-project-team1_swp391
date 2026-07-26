@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 
 interface ReviewResponse {
   reviewId: number;
@@ -62,7 +63,7 @@ export function OwnerReviewHistoryList() {
       // Refresh the list after replying
       await fetchReviews();
     } catch (err: any) {
-      alert(err.message || "Không thể gửi phản hồi. Vui lòng thử lại.");
+      toast.error(err.message || "Không thể gửi phản hồi. Vui lòng thử lại.");
     } finally {
       setSubmittingReply(false);
     }
