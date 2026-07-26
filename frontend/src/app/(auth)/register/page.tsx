@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { 
   Mail, 
@@ -46,9 +46,13 @@ import {
 import { PasswordStrengthIndicator } from "@/components/auth/PasswordStrengthIndicator";
 import { DocumentUploader } from "@/components/shared/DocumentUploader";
 
-function RegisterPage() {
+function RegisterContent() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"customer" | "owner">("customer");
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState<"customer" | "owner">(
+    tabParam === "owner" ? "owner" : "customer"
+  );
   
   // States for Customer registration
   const [isLoadingCustomer, setIsLoadingCustomer] = useState(false);
@@ -681,4 +685,14 @@ function RegisterPage() {
   );
 }
 
-export default RegisterPage;
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-primary/5 flex items-center justify-center p-4">
+        Đang tải...
+      </div>
+    }>
+      <RegisterContent />
+    </Suspense>
+  );
+}
