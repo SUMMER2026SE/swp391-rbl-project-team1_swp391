@@ -746,7 +746,23 @@ public interface BookingRepository extends JpaRepository<Booking, Integer>, JpaS
     List<Booking> findUpcomingUnremindedBookings(
             @Param("startDate") java.time.LocalDate startDate,
             @Param("endDate") java.time.LocalDate endDate);
+    // --- AI Proactive Notification Queries ---
+
+    @Query("SELECT AVG(b.totalPrice) FROM Booking b WHERE b.user.userId = :userId AND b.bookingStatus = com.sportvenue.entity.enums.BookingStatus.COMPLETED")
+    BigDecimal avgPricePerBookingCompleted(@Param("userId") Integer userId);
+
+    @Query("SELECT MAX(b.reservationDate) FROM Booking b WHERE b.user.userId = :userId AND b.bookingStatus = com.sportvenue.entity.enums.BookingStatus.COMPLETED")
+    LocalDate findLastBookingDateByUserId(@Param("userId") Integer userId);
+
+    @Query("SELECT b.slot.startTime, COUNT(b) FROM Booking b WHERE b.user.userId = :userId AND b.bookingStatus = com.sportvenue.entity.enums.BookingStatus.COMPLETED GROUP BY b.slot.startTime ORDER BY COUNT(b) DESC")
+    List<Object[]> findPreferredTimeStartsByUserId(@Param("userId") Integer userId, Pageable pageable);
+
+    @Query("SELECT b.slot.endTime, COUNT(b) FROM Booking b WHERE b.user.userId = :userId AND b.bookingStatus = com.sportvenue.entity.enums.BookingStatus.COMPLETED GROUP BY b.slot.endTime ORDER BY COUNT(b) DESC")
+    List<Object[]> findPreferredTimeEndsByUserId(@Param("userId") Integer userId, Pageable pageable);
+
+    @Query(value = "SELECT EXTRACT(ISODOW FROM reservation_date) as dow, COUNT(*) as cnt FROM bookings WHERE user_id = :userId AND booking_status = 'COMPLETED' GROUP BY dow ORDER BY cnt DESC", nativeQuery = true)
+    List<Object[]> findPreferredWeekdayByUserId(@Param("userId") Integer userId, Pageable pageable);
+
+    @Query("SELECT b.stadium.sportType.sportTypeId, b.stadium.sportType.sportName, COUNT(b) FROM Booking b WHERE b.user.userId = :userId AND b.bookingStatus = com.sportvenue.entity.enums.BookingStatus.COMPLETED GROUP BY b.stadium.sportType.sportTypeId, b.stadium.sportType.sportName ORDER BY COUNT(b) DESC")
+    List<Object[]> findTopSportWithIdByUserId(@Param("userId") Integer userId, Pageable pageable);
 }
-
-
-
