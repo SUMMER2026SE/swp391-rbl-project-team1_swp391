@@ -60,6 +60,8 @@ public class AiChatServiceImpl implements AiChatService {
     private final IntentValidator intentValidator;
     private final AiConversationContextService conversationContextService;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private final PersonalizationPromptBuilder personalizationPromptBuilder;
+    private final com.sportvenue.service.FeatureFlagService featureFlagService;
 
     @Value("${app.ai.model:llama-3.3-70b-versatile}")
     private String model;
@@ -579,8 +581,13 @@ public class AiChatServiceImpl implements AiChatService {
                 break;
         }
 
+        String personalizationSection = "";
+        if (userId != null && featureFlagService.isPersonalization()) {
+            personalizationSection = personalizationPromptBuilder.buildSupplement(userId);
+        }
+
         // Nối rõ ràng bằng "\n\n"
-        return String.join("\n\n", CUSTOMER_SYSTEM_PROMPT, dynamicFewShot, FAQ_PROMPT, buildCurrentTimeContext(), roleSuffix);
+        return String.join("\n\n", CUSTOMER_SYSTEM_PROMPT, dynamicFewShot, FAQ_PROMPT, buildCurrentTimeContext(), personalizationSection, roleSuffix);
     }
 
     /**

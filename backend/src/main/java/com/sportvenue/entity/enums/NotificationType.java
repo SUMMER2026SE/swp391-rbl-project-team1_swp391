@@ -12,6 +12,7 @@ public enum NotificationType {
     ACCOUNT_LOCK,
     APPEAL,
     REPORT,
+    AI_SUGGESTION,
 
     // CUSTOMER TYPES
     BOOKING_CONFIRMED,           // Đặt sân thành công

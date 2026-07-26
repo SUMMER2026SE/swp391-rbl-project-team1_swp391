@@ -78,7 +78,7 @@ class AiChatServiceImplLogTest {
         service = new AiChatServiceImpl(groqClient, stadiumSearchHandler, slotAvailabilityHandler,
                 matchRequestHandler, policyHandler, bookingHandler, joinMatchHandler, myBookingsHandler,
                 bookingStatusHandler, cancelBookingHandler, getPriceHandler, recommendTimeHandler,
-                aiUsageLogRepository, paramNormalizer, intentValidator, conversationContextService);
+                aiUsageLogRepository, paramNormalizer, intentValidator, conversationContextService, null, null);
     }
 
     private AiChatTurnRequest request(String message) {
