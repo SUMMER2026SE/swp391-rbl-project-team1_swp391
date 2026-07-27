@@ -38,4 +38,15 @@ CREATE TABLE notification_log (
 );
 CREATE INDEX idx_notification_log_user ON notification_log(user_id, created_at DESC);
 
-ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'AI_SUGGESTION';
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'notification_type') THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_enum e
+            JOIN pg_type t ON t.oid = e.enumtypid
+            WHERE t.typname = 'notification_type' AND e.enumlabel = 'AI_SUGGESTION'
+        ) THEN
+            ALTER TYPE notification_type ADD VALUE 'AI_SUGGESTION';
+        END IF;
+    END IF;
+END $$;

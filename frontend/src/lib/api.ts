@@ -211,6 +211,11 @@ export async function del<T>(url: string, config?: AxiosRequestConfig): Promise<
   return res.data
 }
 
+export async function postLongTimeout<T>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+  const res = await api.post<T>(url, data, { ...config, timeout: 60_000 })
+  return res.data
+}
+
 export type FileUploadResult = {
   url: string
   fileName: string

@@ -1,4 +1,4 @@
-import { post } from "./api";
+import { postLongTimeout } from "./api";
 import { AiChatTurnRequest, AiChatTurnResponse, ChatMessage } from "@/types/aiChat";
 import { ApiResponse } from "@/types/common";
 
@@ -87,7 +87,7 @@ export async function sendChatMessage(
     userLng: gps?.lng ?? null,
   };
 
-  const response = await post<ApiResponse<AiChatTurnResponse>>("/ai/chat", payload, {
+  const response = await postLongTimeout<ApiResponse<AiChatTurnResponse>>("/ai/chat", payload, {
     headers: {
       "X-Session-ID": sessionId,
     },

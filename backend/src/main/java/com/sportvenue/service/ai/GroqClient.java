@@ -10,6 +10,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -28,6 +29,8 @@ public class GroqClient {
 
     private static final int MAX_RETRIES_PER_KEY = 1;
     private static final long RETRY_DELAY_MS = 1500;
+    private static final Duration HTTP_CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration HTTP_READ_TIMEOUT = Duration.ofSeconds(25);
 
     private final RestClient.Builder restClientBuilder;
     private final GroqKeyPoolManager keyPoolManager;
@@ -35,7 +38,9 @@ public class GroqClient {
     public GroqClient(@Value("${app.ai.base-url}") String baseUrl,
                       @Value("${app.ai.api-keys:}") String apiKeysCsv,
                       GroqKeyPoolManager keyPoolManager) {
-        this.restClientBuilder = RestClient.builder().baseUrl(baseUrl);
+        this.restClientBuilder = RestClient.builder()
+                .baseUrl(baseUrl)
+                .requestFactory(new org.springframework.http.client.SimpleClientHttpRequestFactory());
         this.keyPoolManager = keyPoolManager;
 
         // Parse comma-separated API keys
@@ -84,6 +89,7 @@ public class GroqClient {
 
             RestClient restClient = restClientBuilder
                     .defaultHeader("Authorization", "Bearer " + apiKey)
+                    .requestFactory(createRequestFactory())
                     .build();
 
             try {
@@ -143,7 +149,7 @@ public class GroqClient {
         return nextAttempt;
     }
 
-    /** Request lỗi không phải rate limit — chờ 1 khoảng ngắn rồi thử key kế tiếp, throw nếu đã hết lượt thử. */
+    /** Request lỗi không phải rate limit — fail fast, thử key kế tiếp ngay, throw nếu đã hết lượt thử. */
     private int handleRestClientFailure(RestClientException e, String apiKey, int attempt, int maxTotalRetries) {
         int nextAttempt = attempt + 1;
         log.warn("Groq request failed with key ***{} (attempt {}/{}): {}", maskKey(apiKey), nextAttempt, maxTotalRetries, e.getMessage());
@@ -152,13 +158,15 @@ public class GroqClient {
             throw new LlmGatewayException(LlmGatewayException.Kind.TIMEOUT,
                     "Không gọi được Groq API sau " + maxTotalRetries + " lần thử: " + e.getMessage(), e);
         }
-        try {
-            Thread.sleep(RETRY_DELAY_MS);
-        } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            throw new LlmGatewayException(LlmGatewayException.Kind.UNKNOWN, "Interrupted", ie);
-        }
         return nextAttempt;
+    }
+
+    private org.springframework.http.client.ClientHttpRequestFactory createRequestFactory() {
+        org.springframework.http.client.SimpleClientHttpRequestFactory f =
+                new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        f.setConnectTimeout(HTTP_CONNECT_TIMEOUT);
+        f.setReadTimeout(HTTP_READ_TIMEOUT);
+        return f;
     }
 
     private ChatCompletionResponse doRequest(RestClient restClient, JsonChatRequest requestBody) {

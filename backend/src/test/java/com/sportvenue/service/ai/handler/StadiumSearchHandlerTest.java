@@ -172,7 +172,7 @@ class StadiumSearchHandlerTest {
         when(publicStadiumService.searchStadiums(any())).thenReturn(emptyResponse);
 
         Stadium court = Stadium.builder().stadiumId(219).stadiumName("Sân 1").nodeType(StadiumNodeType.COURT).build();
-        when(stadiumRepository.findCourtsByParentFacilityNameKeyword("Sân vận động Cẩm Lệ")).thenReturn(List.of(court));
+        when(stadiumRepository.findCourtsByParentFacilityNameKeyword("Sân vận động Cẩm Lệ", null)).thenReturn(List.of(court));
         when(stadiumRepository.findCourtsForAiToolByIds(List.of(219))).thenReturn(List.of(court));
         when(stadiumMapper.toResponse(court)).thenReturn(StadiumResponse.builder().stadiumId(219).stadiumName("Sân 1").build());
 
@@ -187,7 +187,7 @@ class StadiumSearchHandlerTest {
         PageResponse<StadiumResponse> emptyResponse = PageResponse.<StadiumResponse>builder()
                 .content(List.of()).pageNumber(0).pageSize(5).totalElements(0).totalPages(0).last(true).build();
         when(publicStadiumService.searchStadiums(any())).thenReturn(emptyResponse);
-        when(stadiumRepository.findCourtsByParentFacilityNameKeyword(anyString())).thenReturn(List.of());
+        when(stadiumRepository.findCourtsByParentFacilityNameKeyword(anyString(), any())).thenReturn(List.of());
 
         StadiumRepository.CourtFacilityNameProjection projection = mock(StadiumRepository.CourtFacilityNameProjection.class);
         when(projection.getStadiumId()).thenReturn(219);
@@ -291,7 +291,7 @@ class StadiumSearchHandlerTest {
             capturedKeywords.add(req.getKeyword());
             return capturedKeywords.size() == 1 ? empty : found;
         });
-        when(stadiumRepository.findCourtsByParentFacilityNameKeyword(anyString())).thenReturn(List.of());
+        when(stadiumRepository.findCourtsByParentFacilityNameKeyword(anyString(), any())).thenReturn(List.of());
         when(stadiumRepository.findAllCourtFacilityNames()).thenReturn(List.of());
 
         AiChatTurnResponse response = handler.handle(
@@ -312,7 +312,7 @@ class StadiumSearchHandlerTest {
         PageResponse<StadiumResponse> empty = PageResponse.<StadiumResponse>builder()
                 .content(List.of()).pageNumber(0).pageSize(5).totalElements(0).totalPages(0).last(true).build();
         when(publicStadiumService.searchStadiums(any())).thenReturn(empty);
-        when(stadiumRepository.findCourtsByParentFacilityNameKeyword(anyString())).thenReturn(List.of());
+        when(stadiumRepository.findCourtsByParentFacilityNameKeyword(anyString(), any())).thenReturn(List.of());
 
         StadiumRepository.CourtFacilityNameProjection projection = mock(StadiumRepository.CourtFacilityNameProjection.class);
         when(projection.getStadiumId()).thenReturn(300);

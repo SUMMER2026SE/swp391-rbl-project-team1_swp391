@@ -95,6 +95,12 @@ management:
     health:
       show-details: when_authorized
 
+# ── Feature Flags ──────────────────────────────────────────
+feature:
+  proactive-notifications: ${FEATURE_PROACTIVE_NOTIFICATIONS:false}
+  personalization: ${FEATURE_PERSONALIZATION:false}
+  compound-task: ${FEATURE_COMPOUND_TASK:true}
+
 # ── App Config (JWT, OTP, Mail, Google) ─────────────────
 app:
   ai:

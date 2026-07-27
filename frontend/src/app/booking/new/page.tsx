@@ -68,7 +68,11 @@ function BookingContent() {
 
     if (!found) return
 
-    if (!found.available) {
+    // Only treat "taken by others" as a blocker. Past slots (slotStatus=AVAILABLE
+    // but available=false because time already passed) are not really taken — just
+    // let user see them and pick a different time naturally.
+    const isBookedByOthers = !found.available && found.slotStatus !== 'AVAILABLE'
+    if (isBookedByOthers) {
       toast.error('Slot này vừa có người đặt, vui lòng chọn slot khác', {
         description: 'Quay lại trang tìm kiếm để chọn sân và khung giờ khác.',
         action: { label: 'Tìm sân khác', onClick: () => router.push('/search') },

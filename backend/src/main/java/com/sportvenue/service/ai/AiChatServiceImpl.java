@@ -1,6 +1,7 @@
 package com.sportvenue.service.ai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sportvenue.dto.request.AiChatTurnRequest;
 import com.sportvenue.dto.response.AiChatTurnResponse;
 import com.sportvenue.security.UserPrincipal;
@@ -28,6 +29,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.stream.Collectors;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -109,6 +111,30 @@ public class AiChatServiceImpl implements AiChatService {
         AiChatTurnResponse fastPathResponse = tryFastPaths(request, userId, conversationKey);
         if (fastPathResponse != null) {
             return fastPathResponse;
+        }
+
+        // FIX Bug 2: Check active plan BEFORE Groq call.
+        // Groq re-classifies control phrases ("tiếp tục", "có", "đồng ý") as unknown,
+        // bypassing the dispatch() check which only handles compound_task intent.
+        // We handle these phrases directly here to advance/cancel the active plan.
+        String trimmedMsg = request.getMessage() != null ? request.getMessage().toLowerCase(Locale.ROOT).trim() : "";
+        boolean isControlMessage = trimmedMsg.equals("tiếp tục") || trimmedMsg.equals("tiếp")
+                || trimmedMsg.equals("có") || trimmedMsg.equals("đồng ý") || trimmedMsg.equals("ok")
+                || trimmedMsg.equals("vâng") || trimmedMsg.equals("có đấy") || trimmedMsg.equals("ừ")
+                || trimmedMsg.equals("bắt đầu") || trimmedMsg.equals("thực hiện");
+        Optional<AiConversationContextService.SubPlan> preCheckPlan =
+                conversationContextService.getSubPlan(conversationKey);
+        if (isControlMessage && preCheckPlan.isPresent()) {
+            AiConversationContextService.SubPlan plan = preCheckPlan.get();
+            if (plan.getStatus() == AiConversationContextService.PlanStatus.IN_PROGRESS
+                    || plan.getStatus() == AiConversationContextService.PlanStatus.PAUSED
+                    || plan.getStatus() == AiConversationContextService.PlanStatus.PLANNING) {
+                log.info("BUG2-FIX: Routing control message '{}' directly to handleSubPlanTurn (intent={})",
+                        trimmedMsg, "continue");
+                ExtractedIntentResult dummyResult = new ExtractedIntentResult("compound_task", 1.0, "", null);
+                return handleSubPlanTurn(dummyResult, request.getMessage(), plan, userId,
+                        conversationKey, request.getUserLat(), request.getUserLng());
+            }
         }
 
         List<GroqClient.ChatMessage> history = toGroqHistory(request.getHistory());
@@ -312,9 +338,9 @@ public class AiChatServiceImpl implements AiChatService {
 
             // Normalize params
             intentResult = paramNormalizer.normalize(intentResult);
-            
-            // Confidence check
-            if (intentResult.getConfidence() < 0.5) {
+
+            // Confidence check — compound_task should NOT be overridden, let planner decide
+            if (intentResult.getConfidence() < 0.5 && !"compound_task".equals(intentResult.getIntent())) {
                 log.info("Low confidence ({} < 0.5), overriding to need_more_info", intentResult.getConfidence());
                 intentResult.setIntent("need_more_info");
                 intentResult.setMessage("Mình chưa rõ ý bạn lắm, bạn có thể nói cụ thể hơn được không?");
@@ -371,6 +397,11 @@ public class AiChatServiceImpl implements AiChatService {
                     .errorReason(parseResult.errorReason())
                     .processingTimeAiMs(latencyMs)
                     .processingTimeHandlerMs(processingTimeHandlerMs)
+                    .suggestionType(null) // populated by suggestion pipeline separately
+                    .subPlanSteps(response.getSubPlan() != null ? response.getSubPlan().getSteps().size() : null)
+                    .subPlanCompleted(response.getSubPlan() != null ? response.getSubPlan().getCurrentStepIndex() : null)
+                    .subPlanRolledBack(response.getSubPlan() != null
+                            && "ROLLED_BACK".equals(response.getSubPlan().getStatus()))
                     .build();
             aiUsageLogRepository.save(usageLog);
         } catch (Exception e) {
@@ -661,27 +692,68 @@ public class AiChatServiceImpl implements AiChatService {
         }
         
         AiConversationContextService.PlanStep currentStep = activePlan.getSteps().get(activePlan.getCurrentStepIndex());
-        
+
+        // FIX Bug 3 root cause: inject stadium IDs directly into step params (JsonNode),
+        // NOT into the text message. BookingHandler reads args.stadiumId/targetIndex, not message text.
+        String effectiveMessage = rawUserMessage;
+        AiConversationContextService.PlanStep stepToExecute = currentStep;
+        if ("create_booking".equals(currentStep.getIntent())
+                && (rawUserMessage == null || rawUserMessage.isBlank()
+                    || rawUserMessage.toLowerCase(Locale.ROOT).trim().matches("tiếp tục|có|đồng ý|ok|vâng|ừ"))) {
+            List<Integer> lastShownStadiumIds = conversationContextService.getLastShownStadiumIds(conversationKey);
+            if (lastShownStadiumIds != null && !lastShownStadiumIds.isEmpty()) {
+                // Deep-copy params to avoid mutating the shared Redis object
+                com.fasterxml.jackson.databind.JsonNode originalParams = currentStep.getParams();
+                ObjectNode injectedParams = objectMapper.valueToTree(originalParams);
+                // Inject: stadiumId = first stadium in list (auto-book first result)
+                injectedParams.put("stadiumId", lastShownStadiumIds.get(0));
+                injectedParams.put("targetIndex", 0);
+                // Normalize time from "17h" → "17:00" so BookingHandler.resolveSlot can parse it
+                if (currentStep.getParams().has("time")) {
+                    String rawTime = currentStep.getParams().get("time").asText().trim();
+                    String normalizedTime = rawTime.replaceAll("(\\d+)h.*", "$1:00");
+                    injectedParams.put("startTime", normalizedTime);
+                    log.info("BUG3-FIX: Normalized time '{}' -> '{}'", rawTime, normalizedTime);
+                }
+                log.info("BUG3-FIX ROOT: Injected stadiumId={}, targetIndex=0, startTime={} into step 2 params. lastShown={}",
+                        lastShownStadiumIds.get(0), injectedParams.get("startTime"), lastShownStadiumIds);
+                // Build new PlanStep with injected params (same status/description/intent)
+                stepToExecute = AiConversationContextService.PlanStep.builder()
+                        .stepNumber(currentStep.getStepNumber())
+                        .description(currentStep.getDescription())
+                        .intent(currentStep.getIntent())
+                        .params(injectedParams)
+                        .status(currentStep.getStatus())
+                        .errorReason(currentStep.getErrorReason())
+                        .build();
+            }
+        }
+
         // Execute current step
-        AiChatTurnResponse stepResponse = aiPlanningService.executeStep(currentStep, userId, conversationKey, rawUserMessage, userLat, userLng);
-        
-        // Update plan state
+        AiChatTurnResponse stepResponse = aiPlanningService.executeStep(stepToExecute, userId, conversationKey, effectiveMessage, userLat, userLng);
+
+        // Update plan state — only advance if step truly completed.
+        // executeStep() now returns PENDING for unclear responses, COMPLETED for success.
         if (currentStep.getStatus() == AiConversationContextService.StepStatus.FAILED) {
             activePlan.setStatus(AiConversationContextService.PlanStatus.PAUSED);
+        } else if (currentStep.getStatus() == AiConversationContextService.StepStatus.PENDING
+                || currentStep.getStatus() == AiConversationContextService.StepStatus.IN_PROGRESS) {
+            // Step needs clarification — do NOT advance.
+            activePlan.setStatus(AiConversationContextService.PlanStatus.PAUSED);
         } else {
-            // Mark step completed, advance index
+            // Step genuinely completed.
             currentStep.setStatus(AiConversationContextService.StepStatus.COMPLETED);
-            
+
             AiConversationContextService.StepResult stepResult = AiConversationContextService.StepResult.builder()
                     .stepNumber(currentStep.getStepNumber())
                     .intent(currentStep.getIntent())
                     .success(true)
                     .data(stepResponse.getBookingId() != null ? stepResponse.getBookingId() : stepResponse.getMatchId())
                     .build();
-            
+
             activePlan.getCompletedSteps().add(stepResult);
             activePlan.setCurrentStepIndex(activePlan.getCurrentStepIndex() + 1);
-            
+
             if (activePlan.getCurrentStepIndex() >= activePlan.getSteps().size()) {
                 activePlan.setStatus(AiConversationContextService.PlanStatus.COMPLETED);
             }

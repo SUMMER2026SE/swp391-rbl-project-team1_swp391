@@ -219,8 +219,12 @@ public class StadiumSearchHandler {
     }
 
     private SearchContextHolder mergeContextFilters(JsonNode args, String conversationKey) {
-        String sportName = args.hasNonNull("sportName") ? args.get("sportName").asText() : null;
-        String district = args.hasNonNull("district") ? args.get("district").asText() : null;
+        // Accept multiple aliases from planner (sport_type/sport/sportName, location/district, etc.)
+        String sportName = args.hasNonNull("sportName") ? args.get("sportName").asText()
+                : (args.hasNonNull("sport_type") ? args.get("sport_type").asText()
+                : (args.hasNonNull("sport") ? args.get("sport").asText() : null));
+        String district = args.hasNonNull("district") ? args.get("district").asText()
+                : (args.hasNonNull("location") ? args.get("location").asText() : null);
         String province = args.hasNonNull("province") ? args.get("province").asText() : null;
 
         java.util.Optional<AiConversationContextService.ConversationContext> ctxOpt = conversationContextService.getContext(conversationKey);
@@ -339,7 +343,7 @@ public class StadiumSearchHandler {
 
     private List<StadiumResponse> getStadiumsWithFallback(List<StadiumResponse> stadiums, StadiumSearchRequest searchRequest) {
         if (stadiums.isEmpty()) {
-            List<StadiumResponse> fallback = findStadiumsByParentFacilityNameFallback(searchRequest.getKeyword());
+            List<StadiumResponse> fallback = findStadiumsByParentFacilityNameFallback(searchRequest.getKeyword(), searchRequest.getFootballFieldType());
             if (!fallback.isEmpty()) {
                 return postProcessSearchResults(fallback);
             } else {
@@ -503,16 +507,15 @@ public class StadiumSearchHandler {
      * Bug #3: Ưu tiên province từ context (Đà Nẵng) thay vì mặc định TP.HCM.
      */
     private void applyDistrictFilter(StadiumSearchRequest.StadiumSearchRequestBuilder builder, JsonNode args, String provinceFromContext) {
-        // Bug #3: Nếu không có district nhưng có province từ context, dùng province đó
-        if (!args.hasNonNull("district") && !args.hasNonNull("province")) {
-            if (provinceFromContext != null) {
-                builder.province(provinceFromContext);
-            }
+        // Bug #3 + compound_task fix: Nếu không có district nhưng có province từ context, dùng province đó
+        // Also accept "location" as alias for district (compound_task planner uses location)
+        String rawDistrict = args.hasNonNull("district") ? args.get("district").asText()
+                : (args.hasNonNull("location") ? args.get("location").asText() : null);
+        String rawProvince = args.hasNonNull("province") ? args.get("province").asText() : provinceFromContext;
+
+        if (rawDistrict == null && rawProvince == null) {
             return;
         }
-
-        String rawDistrict = args.hasNonNull("district") ? args.get("district").asText() : null;
-        String rawProvince = args.hasNonNull("province") ? args.get("province").asText() : provinceFromContext;
 
         VietnamLocationResolver.LocationMatch match = locationResolver.deriveFromAddress(rawDistrict != null ? rawDistrict : rawProvince);
         if (match.province() != null) {
@@ -539,21 +542,38 @@ public class StadiumSearchHandler {
     }
 
     /**
-     * BUG 3 FIX: Trích xuất loại sân bóng đá từ input (Sân 5 người, Sân 7 người).
-     * Chỉ áp dụng khi user nói rõ "5 người" hoặc "7 người".
+     * Trích xuất loại sân bóng đá từ input (Sân 5 người, Sân 7 người).
+     * Accepts: footballFieldType, player_count, playerCount, sport_type (all "5 người" etc.)
      */
     private void applyFootballFieldTypeFilter(StadiumSearchRequest.StadiumSearchRequestBuilder builder, JsonNode args) {
-        if (!args.hasNonNull("footballFieldType")) {
+        String raw = args.hasNonNull("footballFieldType") ? args.get("footballFieldType").asText()
+                : (args.hasNonNull("player_count") ? args.get("player_count").asText()
+                : (args.hasNonNull("sport_type") ? args.get("sport_type").asText()
+                : (args.hasNonNull("playerCount") ? String.valueOf(args.get("playerCount").asInt()) : null)));
+        if (raw == null) {
             return;
         }
         try {
-            String value = args.get("footballFieldType").asText().toUpperCase();
+            String normalized = raw.toUpperCase()
+                    .replace(" ", "").replaceAll("NGƯỜI", "").replaceAll("NGƯỜI", "");
+            String value;
+            if (normalized.contains("5")) {
+                value = "FIVE_A_SIDE";
+            } else if (normalized.contains("7")) {
+                value = "SEVEN_A_SIDE";
+            } else if (normalized.contains("11")) {
+                value = "ELEVEN_A_SIDE";
+            } else if (normalized.equalsIgnoreCase("FUTSAL")) {
+                value = "FUTSAL";
+            } else {
+                value = raw.toUpperCase().trim();
+            }
             com.sportvenue.entity.enums.FootballFieldType fieldType =
                     com.sportvenue.entity.enums.FootballFieldType.valueOf(value);
             builder.footballFieldType(fieldType);
-            log.info("BUG 3 FIX: Applying footballFieldType filter: {}", fieldType);
+            log.info("applyFootballFieldTypeFilter: '{}' -> {}", raw, fieldType);
         } catch (IllegalArgumentException e) {
-            log.warn("Invalid footballFieldType value: {}", args.get("footballFieldType").asText());
+            log.warn("Invalid footballFieldType value '{}': {}", raw, e.getMessage());
         }
     }
 
@@ -587,12 +607,13 @@ public class StadiumSearchHandler {
      * đó tồn tại thật. Thử lại theo tên Facility cha, rồi thử lại lần 2 không phân biệt dấu tiếng
      * Việt (model đôi khi tự đánh sai dấu không ổn định giữa các lần gọi).
      */
-    private List<StadiumResponse> findStadiumsByParentFacilityNameFallback(String rawKeyword) {
+    private List<StadiumResponse> findStadiumsByParentFacilityNameFallback(String rawKeyword,
+            com.sportvenue.entity.enums.FootballFieldType fieldType) {
         if (rawKeyword == null || rawKeyword.isBlank()) {
             return List.of();
         }
 
-        List<Stadium> fallbackCourts = stadiumRepository.findCourtsByParentFacilityNameKeyword(rawKeyword);
+        List<Stadium> fallbackCourts = stadiumRepository.findCourtsByParentFacilityNameKeyword(rawKeyword, fieldType);
 
         if (fallbackCourts.isEmpty()) {
             List<String> tokens = meaningfulKeywordTokens(rawKeyword);

@@ -1,6 +1,7 @@
 package com.sportvenue.repository;
 
 import com.sportvenue.entity.Stadium;
+import com.sportvenue.entity.enums.FootballFieldType;
 import com.sportvenue.entity.enums.StadiumStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -158,6 +159,19 @@ public interface StadiumRepository extends JpaRepository<Stadium, Integer>, JpaS
     @Query("SELECT s FROM Stadium s WHERE s.parentStadium.stadiumId = :facilityId AND s.nodeType = com.sportvenue.entity.enums.StadiumNodeType.COURT")
     List<Stadium> findCourtsByFacilityId(@Param("facilityId") Integer facilityId);
 
+    @Query("""
+            SELECT s FROM Stadium s
+            WHERE s.parentStadium.stadiumId = :facilityId
+            AND s.nodeType = com.sportvenue.entity.enums.StadiumNodeType.COURT
+            AND s.stadiumId <> :excludeId
+            AND s.footballFieldType = :fieldType
+            AND s.stadiumStatus = com.sportvenue.entity.enums.StadiumStatus.AVAILABLE
+            """)
+    List<Stadium> findSiblingCourtsByFacilityAndFieldType(
+            @Param("facilityId") Integer facilityId,
+            @Param("excludeId") Integer excludeId,
+            @Param("fieldType") FootballFieldType fieldType);
+
     @EntityGraph(attributePaths = {"parentStadium", "complex"})
     @Query("SELECT s FROM Stadium s WHERE s.complex.complexId = :complexId AND s.nodeType = com.sportvenue.entity.enums.StadiumNodeType.COURT")
     List<Stadium> findCourtsByComplexId(@Param("complexId") Integer complexId);
@@ -204,8 +218,11 @@ public interface StadiumRepository extends JpaRepository<Stadium, Integer>, JpaS
             AND s.stadiumStatus = com.sportvenue.entity.enums.StadiumStatus.AVAILABLE
             AND p IS NOT NULL
             AND LOWER(p.stadiumName) LIKE LOWER(CONCAT('%', :keyword, '%'))
+            AND (:#{#fieldType == null} = true OR s.footballFieldType = :fieldType)
             """)
-    List<Stadium> findCourtsByParentFacilityNameKeyword(@Param("keyword") String keyword);
+    List<Stadium> findCourtsByParentFacilityNameKeyword(
+            @Param("keyword") String keyword,
+            @Param("fieldType") FootballFieldType fieldType);
 
     /**
      * Projection nhẹ dùng để so khớp không phân biệt dấu tiếng Việt ở tầng Java (xem

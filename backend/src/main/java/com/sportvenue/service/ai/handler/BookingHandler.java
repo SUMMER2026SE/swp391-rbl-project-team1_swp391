@@ -149,6 +149,24 @@ public class BookingHandler {
             return errorResponse("Không thể đặt sân cho ngày trong quá khứ.");
         }
 
+        // Nếu target date là hôm nay mà giờ target đã qua → không nên tạo draft cho khung giờ đã qua
+        // (AI sẽ trigger sibling fallback hoặc confirm draft cho slot đã qua, gây trang /booking/new
+        // hiển thị lỗi "slot vừa có người đặt" do `getSlotsByDate` đánh `available=false` với giờ đã qua).
+        if (requestedDate.isEqual(LocalDate.now(clock))) {
+            java.time.LocalTime nowVietnam = java.time.LocalTime.now(clock);
+            java.util.Optional<java.time.LocalTime> targetStartFromArgs = java.util.Optional.empty();
+            if (args.hasNonNull("startTime")) {
+                try { targetStartFromArgs = java.util.Optional.of(java.time.LocalTime.parse(args.get("startTime").asText())); }
+                catch (Exception ignored) {}
+            }
+            if (targetStartFromArgs.isPresent() && !targetStartFromArgs.get().isAfter(nowVietnam)) {
+                return errorResponse(String.format(
+                        "Khung giờ %s hôm nay đã qua (hiện tại %s). Vui lòng chọn khung giờ khác hoặc ngày khác.",
+                        targetStartFromArgs.get(),
+                        nowVietnam));
+            }
+        }
+
         // Check maintenance
         if (maintenanceScheduleService.isStadiumUnderMaintenance(stadium, requestedDate)) {
             return errorResponse("Sân này có lịch bảo trì vào ngày " + requestedDate + ", không thể đặt. Bạn có thể chọn ngày khác hoặc sân khác.");
@@ -162,20 +180,16 @@ public class BookingHandler {
             return handleMissingSlot(args, conversationKey, stadiumId, requestedDate);
         }
 
-        AiChatTurnResponse availabilityResponse = checkSlotAvailability(targetSlot, slots, requestedDate, conversationKey, stadiumId);
-        if (availabilityResponse != null) {
-            return availabilityResponse;
+        // checkSlotAvailability merged into sibling-fallback so full court → sibling
+        AiChatTurnResponse slotResponse = checkSlotAvailableWithSiblingFallback(
+                stadium, targetSlot, slots, requestedDate, conversationKey);
+        if (slotResponse != null) {
+            return slotResponse;
         }
 
         AiChatTurnResponse duplicateResponse = checkDuplicateBookings(userId, targetSlot.getSlotId(), requestedDate);
         if (duplicateResponse != null) {
             return duplicateResponse;
-        }
-
-        // Double-booking protection - re-verify slot is still available
-        AiChatTurnResponse slotTakenResponse = checkSlotTakenByOthers(stadiumId, targetSlot.getSlotId(), requestedDate);
-        if (slotTakenResponse != null) {
-            return slotTakenResponse;
         }
 
         return createConfirmBookingResponse(stadium, requestedDate, targetSlot, conversationKey);
@@ -504,7 +518,7 @@ public class BookingHandler {
         }
         if (keyword != null && !keyword.isBlank()) {
             // Tìm theo keyword (tên sân, tên facility)
-            List<Stadium> found = stadiumRepository.findCourtsByParentFacilityNameKeyword(keyword);
+            List<Stadium> found = stadiumRepository.findCourtsByParentFacilityNameKeyword(keyword, null);
             if (found.isEmpty()) {
                 // Thử search theo tên court
                 found = stadiumRepository.searchByKeyword(keyword, org.springframework.data.domain.Pageable.ofSize(10)).getContent();
@@ -866,29 +880,76 @@ public class BookingHandler {
         return null;
     }
 
-    private AiChatTurnResponse checkSlotAvailability(TimeSlotResponse targetSlot, List<TimeSlotResponse> slots, LocalDate requestedDate, String conversationKey, Integer stadiumId) {
-        if (!Boolean.TRUE.equals(targetSlot.getAvailable())) {
-            if (requestedDate.isEqual(LocalDate.now(clock))) {
-                java.time.LocalTime nowVietnam = java.time.LocalTime.now(clock);
-                slots = slots.stream().filter(s -> s.getStartTime() != null && s.getStartTime().isAfter(nowVietnam)).toList();
+    /**
+     * Unified slot availability check: if target slot unavailable, try sibling courts.
+     * Returns null only if the target court/slot is genuinely available.
+     */
+    private AiChatTurnResponse checkSlotAvailableWithSiblingFallback(
+            Stadium stadium, TimeSlotResponse targetSlot, List<TimeSlotResponse> slots,
+            LocalDate requestedDate, String conversationKey) {
+
+        if (Boolean.TRUE.equals(targetSlot.getAvailable())) {
+            // Quick DB re-check before confirming
+            AiChatTurnResponse taken = checkSlotTakenByOthersWithSiblingFallback(
+                    stadium, targetSlot, requestedDate, conversationKey);
+            if (taken != null) {
+                return taken;
             }
-            if (slots.stream().noneMatch(s -> Boolean.TRUE.equals(s.getAvailable()))) {
-                return AiChatTurnResponse.builder()
-                        .message("Sân này hiện đã kín lịch trong ngày " + requestedDate + ". Vui lòng chọn ngày khác.")
-                        .intent("get_slots")
-                        .slots(slots)
-                        .build();
-            } else {
-                conversationContextService.saveLastShownSlots(conversationKey, slots.stream().map(TimeSlotResponse::getSlotId).toList());
-                conversationContextService.saveCurrentStadiumId(conversationKey, stadiumId);
-                return AiChatTurnResponse.builder()
-                        .message("Khung giờ bạn chọn hiện không có sẵn hoặc đã có người đặt. Đây là các giờ còn trống trong ngày " + requestedDate + " để bạn chọn:")
-                        .intent("get_slots")
-                        .slots(slots)
-                        .build();
+            return null; // genuinely available
+        }
+
+        // Target slot unavailable — try sibling courts
+        Stadium parent = stadium.getParentStadium();
+        if (parent == null || stadium.getFootballFieldType() == null) {
+            // No siblings possible — show available slots as fallback
+            return buildUnavailableSlotsResponse(stadium, slots, requestedDate, conversationKey);
+        }
+
+        List<Stadium> siblings = stadiumRepository.findSiblingCourtsByFacilityAndFieldType(
+                parent.getStadiumId(), stadium.getStadiumId(), stadium.getFootballFieldType());
+
+        List<com.sportvenue.entity.enums.BookingStatus> blockingStatuses = List.of(
+                com.sportvenue.entity.enums.BookingStatus.PENDING,
+                com.sportvenue.entity.enums.BookingStatus.CONFIRMED
+        );
+
+        Stadium freeSibling = null;
+        for (Stadium sibling : siblings) {
+            boolean siblingTaken = bookingRepository.existsActiveBooking(
+                    sibling.getStadiumId(), targetSlot.getSlotId(), requestedDate, blockingStatuses);
+            if (!siblingTaken) {
+                freeSibling = sibling;
+                break;
             }
         }
-        return null;
+
+        if (freeSibling != null) {
+            log.info("Sibling fallback: '{}' unavailable at slot {}, booking sibling '{}'",
+                    stadium.getStadiumName(), targetSlot.getSlotId(), freeSibling.getStadiumName());
+            conversationContextService.saveCurrentStadiumId(conversationKey, freeSibling.getStadiumId());
+            conversationContextService.saveLastShownStadiums(conversationKey, List.of(freeSibling.getStadiumId()));
+            return createConfirmBookingResponse(freeSibling, requestedDate, targetSlot, conversationKey);
+        }
+
+        return buildUnavailableSlotsResponse(stadium, slots, requestedDate, conversationKey);
+    }
+
+    private AiChatTurnResponse buildUnavailableSlotsResponse(
+            Stadium stadium, List<TimeSlotResponse> slots, LocalDate requestedDate, String conversationKey) {
+        if (requestedDate.isEqual(LocalDate.now(clock))) {
+            java.time.LocalTime nowVietnam = java.time.LocalTime.now(clock);
+            slots = slots.stream()
+                    .filter(s -> s.getStartTime() != null && s.getStartTime().isAfter(nowVietnam))
+                    .toList();
+        }
+        conversationContextService.saveLastShownSlots(conversationKey,
+                slots.stream().map(TimeSlotResponse::getSlotId).toList());
+        conversationContextService.saveCurrentStadiumId(conversationKey, stadium.getStadiumId());
+        return AiChatTurnResponse.builder()
+                .message("Khung giờ bạn chọn hiện không có sẵn. Đây là các giờ còn trống trong ngày " + requestedDate + " để bạn chọn:")
+                .intent("get_slots")
+                .slots(slots)
+                .build();
     }
 
     private AiChatTurnResponse checkDuplicateBookings(Integer userId, Integer slotId, LocalDate requestedDate) {
@@ -913,22 +974,58 @@ public class BookingHandler {
     }
 
     /**
-     * Kiểm tra slot đã bị đặt bởi người khác chưa.
+     * Check slot taken + auto-fallback to sibling courts (same facility, same field type, same slot).
+     * When a free sibling is found, creates the draft booking immediately so executeStep marks COMPLETED.
      */
-    private AiChatTurnResponse checkSlotTakenByOthers(Integer stadiumId, Integer slotId, LocalDate requestedDate) {
-        // Chỉ check PENDING và CONFIRMED - PENDING_PAYMENT đã timeout sẽ được release
+    private AiChatTurnResponse checkSlotTakenByOthersWithSiblingFallback(
+            Stadium stadium, TimeSlotResponse targetSlot, LocalDate requestedDate, String conversationKey) {
         List<com.sportvenue.entity.enums.BookingStatus> blockingStatuses = List.of(
                 com.sportvenue.entity.enums.BookingStatus.PENDING,
                 com.sportvenue.entity.enums.BookingStatus.CONFIRMED
         );
-        boolean isTaken = bookingRepository.existsActiveBooking(stadiumId, slotId, requestedDate, blockingStatuses);
-        if (isTaken) {
+        boolean isTaken = bookingRepository.existsActiveBooking(
+                stadium.getStadiumId(), targetSlot.getSlotId(), requestedDate, blockingStatuses);
+
+        if (!isTaken) {
+            return null;
+        }
+
+        // Slot taken — try sibling courts
+        Stadium parent = stadium.getParentStadium();
+        if (parent == null || stadium.getFootballFieldType() == null) {
             return AiChatTurnResponse.builder()
                     .message("Rất tiếc, sân này vừa được đặt bởi người khác cho khung giờ bạn chọn. Vui lòng chọn khung giờ khác hoặc liên hệ chúng tôi để được hỗ trợ.")
                     .intent("get_slots")
                     .build();
         }
-        return null;
+
+        List<Stadium> siblings = stadiumRepository.findSiblingCourtsByFacilityAndFieldType(
+                parent.getStadiumId(), stadium.getStadiumId(), stadium.getFootballFieldType());
+
+        Stadium freeSibling = null;
+        for (Stadium sibling : siblings) {
+            boolean siblingTaken = bookingRepository.existsActiveBooking(
+                    sibling.getStadiumId(), targetSlot.getSlotId(), requestedDate, blockingStatuses);
+            if (!siblingTaken) {
+                freeSibling = sibling;
+                break;
+            }
+        }
+
+        if (freeSibling != null) {
+            log.info("Sibling fallback: '{}' full at slot {}, booking sibling '{}'",
+                    stadium.getStadiumName(), targetSlot.getSlotId(), freeSibling.getStadiumName());
+            conversationContextService.saveCurrentStadiumId(conversationKey, freeSibling.getStadiumId());
+            conversationContextService.saveLastShownStadiums(conversationKey, List.of(freeSibling.getStadiumId()));
+
+            // Build draft booking for the free sibling — this is what executeStep needs to mark COMPLETED
+            return createConfirmBookingResponse(freeSibling, requestedDate, targetSlot, conversationKey);
+        }
+
+        return AiChatTurnResponse.builder()
+                .message("Rất tiếc, tất cả sân cùng loại tại khu vực này đều đã được đặt vào khung giờ bạn chọn. Vui lòng chọn ngày hoặc giờ khác.")
+                .intent("get_slots")
+                .build();
     }
 
     private AiChatTurnResponse errorResponse(String message) {

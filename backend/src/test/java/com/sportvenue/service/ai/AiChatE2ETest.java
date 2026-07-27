@@ -138,7 +138,8 @@ class AiChatE2ETest {
         aiChatService = new AiChatServiceImpl(groqClient, stadiumSearchHandler, slotAvailabilityHandler,
                 matchRequestHandler, policyHandler, bookingHandler, joinMatchHandler, myBookingsHandler,
                 bookingStatusHandler, cancelBookingHandler, getPriceHandler, recommendTimeHandler,
-                aiUsageLogRepository, paramNormalizer, intentValidator, conversationContextService, null, null);
+                aiUsageLogRepository, paramNormalizer, intentValidator, conversationContextService,
+                null, null, null);
         aiChatService.setClock(fixedClock);
     }
 

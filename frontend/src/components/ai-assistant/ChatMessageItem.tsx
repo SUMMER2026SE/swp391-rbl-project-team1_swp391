@@ -284,8 +284,8 @@ export function ChatMessageItem({ msg, isLatest, onSend }: ChatMessageProps) {
               <SubPlanProgressCard
                 subPlan={msg.subPlan}
                 isLatestMessage={isLatest}
-                onNextStep={() => onSend?.("Tiếp tục")}
-                onCancel={() => onSend?.("Hủy")}
+                onNextStep={() => onSend?.("tiếp tục")}
+                onCancel={() => onSend?.("hủy")}
               />
             )}
 

@@ -68,6 +68,12 @@ class AiChatServiceImplTest {
     private com.sportvenue.repository.AiUsageLogRepository aiUsageLogRepository;
     @Mock
     private AiConversationContextService conversationContextService;
+    @Mock
+    private com.sportvenue.service.ai.PersonalizationPromptBuilder personalizationPromptBuilder;
+    @Mock
+    private com.sportvenue.service.FeatureFlagService featureFlagService;
+    @Mock
+    private com.sportvenue.service.ai.AiPlanningService aiPlanningService;
 
     private AiChatServiceImpl service;
 
@@ -82,7 +88,8 @@ class AiChatServiceImplTest {
         service = new AiChatServiceImpl(groqClient, stadiumSearchHandler, slotAvailabilityHandler,
                 matchRequestHandler, policyHandler, bookingHandler, joinMatchHandler, myBookingsHandler,
                 bookingStatusHandler, cancelBookingHandler, getPriceHandler, recommendTimeHandler,
-                aiUsageLogRepository, paramNormalizer, intentValidator, conversationContextService, null, null);
+                aiUsageLogRepository, paramNormalizer, intentValidator, conversationContextService,
+                personalizationPromptBuilder, featureFlagService, aiPlanningService);
     }
 
     private AiChatTurnRequest request(String message) {

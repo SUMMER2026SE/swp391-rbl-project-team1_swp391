@@ -37,6 +37,11 @@ springdoc:
   swagger-ui:
     enabled: true
 
+feature:
+  proactive-notifications: false
+  personalization: false
+  compound-task: true
+
 app:
   jwt:
     access-token-expiry: 86400
