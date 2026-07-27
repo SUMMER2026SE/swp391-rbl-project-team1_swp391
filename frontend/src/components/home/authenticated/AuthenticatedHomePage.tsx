@@ -6,7 +6,6 @@ import { Loader2, AlertCircle, Sparkles } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/landing/Footer";
 import { WelcomeBar } from "@/components/home/authenticated/WelcomeBar";
-import { UpcomingBookingsSection } from "@/components/home/authenticated/UpcomingBookingsSection";
 import { FavoriteVenuesSection } from "@/components/home/authenticated/FavoriteVenuesSection";
 import { AiRecommendationsSection } from "@/components/home/authenticated/AiRecommendationsSection";
 import { CommunityFeedSection } from "@/components/home/authenticated/CommunityFeedSection";
@@ -105,7 +104,6 @@ export function AuthenticatedHomePage({ user }: AuthenticatedHomePageProps) {
           favoriteCount={dashboard.recentlyPlayedVenueCount}
           rewardPoints={dashboard.rewardPoints}
         />
-        <UpcomingBookingsSection bookings={dashboard.upcomingBookings} />
         <FavoriteVenuesSection venues={recentlyPlayedVenues} />
         <AiRecommendationsSection venues={recommendedVenues} />
         {dashboard.communityEvents.length > 0 && (
