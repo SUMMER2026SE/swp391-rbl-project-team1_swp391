@@ -23,6 +23,8 @@ import org.mockito.quality.Strictness;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.nullable;
+import com.fasterxml.jackson.databind.JsonNode;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -100,7 +102,7 @@ class AiChatServiceImplTest {
         assertThat(response.getMessage()).isNotBlank();
         verify(stadiumSearchHandler, never()).handle(any(), any(), any());
         verify(slotAvailabilityHandler, never()).handle(any(), any(), any());
-        verify(matchRequestHandler, never()).handle(any(), any());
+        verify(matchRequestHandler, never()).handle(any(JsonNode.class), any(String.class), any(String.class), any(Integer.class));
         verify(policyHandler, never()).handle(any(), any());
     }
 

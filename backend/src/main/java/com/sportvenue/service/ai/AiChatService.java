@@ -13,4 +13,7 @@ public interface AiChatService {
      *                        tra/lưu lastShownResults; truyền null nếu không cần tính năng này.
      */
     AiChatTurnResponse handleChat(AiChatTurnRequest request, UserPrincipal userPrincipal, String conversationKey);
+
+    /** Xóa Redis context của user — dùng khi logout để không bị truy cập context của user khác. */
+    void clearContextForUser(Integer userId);
 }

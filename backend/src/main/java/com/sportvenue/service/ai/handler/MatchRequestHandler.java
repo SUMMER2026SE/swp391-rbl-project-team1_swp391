@@ -35,13 +35,17 @@ public class MatchRequestHandler {
     private static final int DEFAULT_SIZE = 5;
     private static final int MAX_SIZE = 10;
 
-    public AiChatTurnResponse handle(JsonNode args, String llmMessage) {
-        return handle(args, llmMessage, null);
+    public AiChatTurnResponse handle(JsonNode args, String llmMessage, Integer userId) {
+        return handle(args, llmMessage, null, userId);
     }
 
     public AiChatTurnResponse handle(JsonNode args, String llmMessage, String conversationKey) {
+        return handle(args, llmMessage, conversationKey, null);
+    }
+
+    public AiChatTurnResponse handle(JsonNode args, String llmMessage, String conversationKey, Integer userId) {
         if (args == null || args.isNull() || args.isMissingNode()) {
-            return handleDefaultMatches(llmMessage, conversationKey);
+            return handleDefaultMatches(llmMessage, conversationKey, userId);
         }
 
         int page = args.hasNonNull("page") ? args.get("page").asInt() : 0;
@@ -93,8 +97,10 @@ public class MatchRequestHandler {
             return handleNoMatchesFound(location, sportTypeId);
         }
 
+        List<MatchResponse> matchList = enrichWithOwnerFlag(matches.getContent(), userId);
+
         if (conversationKey != null) {
-            List<Integer> matchIds = matches.getContent().stream()
+            List<Integer> matchIds = matchList.stream()
                     .map(MatchResponse::getMatchId)
                     .toList();
             conversationContextService.saveLastShownMatches(conversationKey, matchIds);
@@ -103,14 +109,15 @@ public class MatchRequestHandler {
         return AiChatTurnResponse.builder()
                 .message(llmMessage)
                 .intent("find_match")
-                .matches(matches.getContent())
+                .matches(matchList)
                 .build();
     }
 
-    private AiChatTurnResponse handleDefaultMatches(String llmMessage, String conversationKey) {
+    private AiChatTurnResponse handleDefaultMatches(String llmMessage, String conversationKey, Integer userId) {
         Pageable pageable = PageRequest.of(0, DEFAULT_SIZE);
         Page<MatchResponse> matches = matchRequestService.getActiveMatches(pageable, null, null);
-        if (matches.isEmpty()) {
+        List<MatchResponse> matchList = enrichWithOwnerFlag(matches.getContent(), userId);
+        if (matchList.isEmpty()) {
             return AiChatTurnResponse.builder()
                     .message("Hiện tại chưa có kèo ghép nào đang mở.")
                     .intent("find_match")
@@ -118,13 +125,45 @@ public class MatchRequestHandler {
                     .build();
         }
         if (conversationKey != null) {
-            conversationContextService.saveLastShownMatches(conversationKey, matches.getContent().stream().map(MatchResponse::getMatchId).toList());
+            conversationContextService.saveLastShownMatches(conversationKey, matchList.stream().map(MatchResponse::getMatchId).toList());
         }
         return AiChatTurnResponse.builder()
                 .message(llmMessage != null && !llmMessage.isBlank() ? llmMessage : "Dưới đây là một số kèo ghép hiện đang mở:")
                 .intent("find_match")
-                .matches(matches.getContent())
+                .matches(matchList)
                 .build();
+    }
+
+    private List<MatchResponse> enrichWithOwnerFlag(List<MatchResponse> matches, Integer userId) {
+        if (userId == null) {
+            return matches;
+        }
+        return matches.stream()
+                .map(m -> MatchResponse.builder()
+                        .matchId(m.getMatchId())
+                        .hostName(m.getHostName())
+                        .hostUserId(m.getHostUserId())
+                        .stadiumName(m.getStadiumName())
+                        .complexName(m.getComplexName())
+                        .stadiumAddress(m.getStadiumAddress())
+                        .sportName(m.getSportName())
+                        .title(m.getTitle())
+                        .description(m.getDescription())
+                        .playDate(m.getPlayDate())
+                        .startTime(m.getStartTime())
+                        .endTime(m.getEndTime())
+                        .maxPlayers(m.getMaxPlayers())
+                        .currentPlayers(m.getCurrentPlayers())
+                        .skillLevel(m.getSkillLevel())
+                        .splitPrice(m.getSplitPrice())
+                        .pricePerPlayer(m.getPricePerPlayer())
+                        .matchStatus(m.getMatchStatus())
+                        .matchingType(m.getMatchingType())
+                        .cancelReason(m.getCancelReason())
+                        .createdAt(m.getCreatedAt())
+                        .isOwner(userId.equals(m.getHostUserId()))
+                        .build())
+                .toList();
     }
 
     private String resolveLocation(JsonNode args, String conversationKey) {

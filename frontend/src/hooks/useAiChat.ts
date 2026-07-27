@@ -1,8 +1,43 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useSession } from "next-auth/react";
 import { sendChatMessage } from "@/lib/ai-chat-api";
+import api from "@/lib/api";
 import { ChatMessage, TimeSlotResponse, BookingAiResponse } from "@/types/aiChat";
 import { StadiumResponse } from "@/types/stadium";
 import { MatchResponse } from "@/types/match";
+
+/** Tạo session ID cố định cho guest — tồn tại trong tab hiện tại (sessionStorage). */
+function getDefaultMessages(): MessageItem[] {
+  return [
+    {
+      id: "welcome",
+      type: "assistant",
+      content:
+        "Xin chào! Tôi là trợ lý AI của SportHub. Tôi có thể giúp bạn:\n• Tìm sân theo môn, khu vực, giá\n• Xem giờ trống và đặt sân trực tiếp\n• Tìm kèo ghép và tham gia kèo\n\nBạn cần tôi giúp gì?",
+      timestamp: new Date().toLocaleTimeString("vi-VN", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+    },
+  ];
+}
+
+function getGuestSessionId(): string {
+  if (typeof window === "undefined") return "";
+  let sid = sessionStorage.getItem("ai_guest_session_id");
+  if (!sid) {
+    sid = crypto.randomUUID();
+    sessionStorage.setItem("ai_guest_session_id", sid);
+  }
+  return sid;
+}
+
+/** Lấy storage key dựa trên trạng thái auth. */
+function getStorageKey(userId: number | undefined): string {
+  return userId != null
+    ? `ai_chat_history_${userId}`
+    : `ai_chat_guest_${getGuestSessionId()}`;
+}
 
 export interface MessageItem {
   id: string | number;
@@ -24,9 +59,12 @@ export interface MessageItem {
 }
 
 export function useAiChat() {
+  const { data: session } = useSession();
   const [message, setMessage] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [messages, setMessages] = useState<MessageItem[]>([]);
+
+  const userId = session?.user?.userId as number | undefined;
 
   // Lưu tọa độ GPS vào ref để dùng ngay khi sendChatMessage mà không cần await
   const gpsRef = useRef<{ lat: number; lng: number } | null>(null);
@@ -63,41 +101,35 @@ export function useAiChat() {
     );
   }, []);
 
-  // Đọc lịch sử trò chuyện từ sessionStorage khi mount
+  // Đọc lịch sử trò chuyện từ sessionStorage khi mount hoặc khi userId đổi
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored = sessionStorage.getItem("ai_chat_messages");
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored) as MessageItem[];
-          setMessages(parsed.map(m => ({ ...m, isHistory: true })));
-          return;
-        } catch (e) {
-          // Fallback to default
-        }
+    if (typeof window === "undefined") {
+      setMessages(getDefaultMessages());
+      return;
+    }
+
+    const key = getStorageKey(userId);
+    const stored = sessionStorage.getItem(key);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as MessageItem[];
+        setMessages(parsed.map(m => ({ ...m, isHistory: true })));
+        return;
+      } catch {
+        // corrupt → fall through to default
       }
     }
-    // Lịch sử mặc định nếu chưa có
-    setMessages([
-      {
-        id: "welcome",
-        type: "assistant",
-        content:
-          "Xin chào! Tôi là trợ lý AI của SportHub. Tôi có thể giúp bạn:\n• Tìm sân theo môn, khu vực, giá\n• Xem giờ trống và đặt sân trực tiếp\n• Tìm kèo ghép và tham gia kèo\n\nBạn cần tôi giúp gì?",
-        timestamp: new Date().toLocaleTimeString("vi-VN", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      },
-    ]);
-  }, []);
+    setMessages(getDefaultMessages());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   // Ghi lịch sử trò chuyện vào sessionStorage mỗi khi tin nhắn thay đổi
   useEffect(() => {
     if (typeof window !== "undefined" && messages.length > 0) {
-      sessionStorage.setItem("ai_chat_messages", JSON.stringify(messages));
+      const key = getStorageKey(userId);
+      sessionStorage.setItem(key, JSON.stringify(messages));
     }
-  }, [messages]);
+  }, [messages, userId]);
 
   const handleSend = async (customMessage?: string) => {
     const q = (customMessage !== undefined ? customMessage : message).trim();
@@ -168,24 +200,23 @@ export function useAiChat() {
     }
   };
 
-  const handleClearHistory = () => {
+  const handleClearHistory = useCallback(async () => {
     if (typeof window !== "undefined") {
-      sessionStorage.removeItem("ai_chat_messages");
-      sessionStorage.removeItem("ai_session_id"); // Reset session ID trên Redis context
+      // Xóa storage key hiện tại
+      const key = getStorageKey(userId);
+      sessionStorage.removeItem(key);
     }
-    setMessages([
-      {
-        id: "welcome-" + Date.now(),
-        type: "assistant",
-        content:
-          "Xin chào! Tôi là trợ lý AI của SportHub. Tôi có thể giúp bạn:\n• Tìm sân theo môn, khu vực, giá\n• Xem giờ trống và đặt sân trực tiếp\n• Tìm kèo ghép và tham gia kèo\n\nBạn cần tôi giúp gì?",
-        timestamp: new Date().toLocaleTimeString("vi-VN", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      },
-    ]);
-  };
+    setMessages(getDefaultMessages());
+    // Gọi BE để xóa Redis context — chỉ khi login
+    if (userId != null) {
+      try {
+        await api.delete("/ai/chat/context");
+      } catch (e) {
+        // Không crash nếu BE call thất bại
+        console.warn("[useAiChat] Failed to clear BE context:", e);
+      }
+    }
+  }, [userId]);
 
   return {
     message,

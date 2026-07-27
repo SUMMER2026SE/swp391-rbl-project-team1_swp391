@@ -44,4 +44,7 @@ public class MatchResponse {
     private MatchingType matchingType;
     private String cancelReason;
     private LocalDateTime createdAt;
+
+    /** true nếu current user là host của kèo này — FE dùng hiển thị badge "Kèo của bạn" thay vì nút Tham gia. */
+    private Boolean isOwner;
 }

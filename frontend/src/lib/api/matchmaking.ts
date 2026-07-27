@@ -33,6 +33,8 @@ export interface MatchResponse {
   matchingType?: "INDIVIDUAL" | "TEAM_VS_TEAM";
   cancelReason?: string;
   createdAt: string;
+  /** true nếu user hiện tại là host của kèo này */
+  isOwner?: boolean;
 }
 
 export interface PageResponse<T> {
