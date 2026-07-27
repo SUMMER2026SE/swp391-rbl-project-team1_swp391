@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 
 type AppealStatus = "PENDING" | "APPROVED" | "REJECTED";
 
@@ -73,6 +74,11 @@ export default function AdminAppealsPage() {
         status: nextStatus,
         adminNote: notes[appealId]?.trim() || undefined,
       });
+      if (nextStatus === "APPROVED") {
+        toast.success("Đã phê duyệt kháng cáo & TỰ ĐỘNG MỞ KHÓA tài khoản người dùng thành công!");
+      } else {
+        toast.info("Đã từ chối đơn kháng cáo.");
+      }
       await loadAppeals();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể xử lý kháng cáo.");

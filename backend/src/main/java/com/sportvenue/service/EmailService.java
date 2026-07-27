@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 
@@ -75,7 +76,7 @@ public class EmailService {
     }
 
     /**
-     * Gửi email OTP khôi phục mật khẩu.
+     * Gửi email OTP khôi phục mật khẩu — HTML Branded Template.
      */
     @Async
     public void sendResetPasswordOtpEmail(String toEmail, String otp) {
@@ -83,70 +84,115 @@ public class EmailService {
             log.warn("=== DEV MAIL MOCK === OTP Reset for {}: {} ===", toEmail, otp);
             return;
         }
-        log.info("Preparing to send OTP reset password email to: {}", toEmail);
         try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromAddress);
-            message.setTo(toEmail);
-            message.setSubject("🔑 Mã OTP Khôi Phục Mật Khẩu — SportsBook");
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(toEmail);
+            helper.setSubject("🔑 Mã OTP Khôi Phục Mật Khẩu — SportsBook");
 
-            String textContent = "Xin chào,\n\n" +
-                    "Bạn đã yêu cầu khôi phục mật khẩu cho tài khoản SportsBook.\n" +
-                    "Mã OTP của bạn là: " + otp + "\n\n" +
-                    "Mã OTP này có hiệu lực trong vòng 5 phút. Vui lòng nhập mã này vào trang khôi phục để đặt lại mật khẩu mới.\n\n" +
-                    "Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email.";
+            String body = "<p>Bạn đã yêu cầu mã OTP để khôi phục mật khẩu tài khoản SportsBook.</p>" +
+                          "<div style=\"background-color:#f1f5f9;border-radius:12px;padding:20px;text-align:center;margin:20px 0;\">" +
+                          "<span style=\"font-size:32px;font-weight:bold;letter-spacing:8px;color:#1e40af;\">" + safe(otp) + "</span>" +
+                          "</div>" +
+                          "<p>Mã này có hiệu lực trong vòng 5 phút. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>";
 
-            message.setText(textContent);
-
-            mailSender.send(message);
+            helper.setText(buildEmailLayout("Khôi phục mật khẩu", "Xin chào", "Mã OTP", "#2563eb", body), true);
+            mailSender.send(mimeMessage);
             log.info("OTP reset password email successfully sent to: {}", toEmail);
-        } catch (MailException e) {
+        } catch (MailException | MessagingException e) {
             log.error("Failed to send OTP reset password email to: {}, error: {}", toEmail, e.getMessage());
         }
     }
 
     /**
-     * Gửi email thông báo khóa/mở khóa tài khoản chủ sân.
+     * Gửi email thông báo khóa/mở khóa tài khoản chủ sân — HTML Branded Template.
      */
     @Async
     public void sendAccountStatusNotification(String toEmail, String businessName, boolean isEnabled, String reason) {
-        if (mockMail) {
-            log.warn("=== DEV MAIL MOCK === Account Status for {}: isEnabled={}, reason={} ===", toEmail, isEnabled, reason);
-            return;
-        }
-        log.info("Preparing to send account status notification email to: {}", toEmail);
-        try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromAddress);
-            message.setTo(toEmail);
-            message.setSubject("Thông báo trạng thái tài khoản đối tác — SportsBook");
-
-            String status = isEnabled ? "MỞ KHÓA" : "BỊ KHÓA";
-            String textContent = "Xin chào " + businessName + ",\n\n" +
-                    "Tài khoản đối tác của bạn trên hệ thống SportsBook vừa được " + status + ".\n\n";
-            
-            if (!isEnabled && StringUtils.hasText(reason)) {
-                textContent += "Lý do khóa: " + reason + "\n\n";
-            } else if (isEnabled && StringUtils.hasText(reason)) {
-                textContent += "Ghi chú: " + reason + "\n\n";
-            }
-
-            if (!isEnabled) {
-                textContent += "Khi tài khoản bị khóa, bạn sẽ không thể đăng nhập và toàn bộ sân thể thao của bạn sẽ tạm thời không nhận đặt lịch mới. Vui lòng liên hệ ban quản trị để biết thêm chi tiết.\n\n";
-            } else {
-                textContent += "Bạn đã có thể đăng nhập bình thường. Chúc bạn kinh doanh thuận lợi!\n\n";
-            }
-
-            textContent += "Trân trọng,\nBan quản trị SportsBook";
-
-            message.setText(textContent);
-
-            mailSender.send(message);
-            log.info("Account status notification email successfully sent to: {}", toEmail);
-        } catch (MailException e) {
-            log.error("Failed to send account status notification email to: {}, error: {}", toEmail, e.getMessage());
+        if (isEnabled) {
+            sendAccountUnlockedEmail(toEmail, StringUtils.hasText(businessName) ? businessName : "Đối tác");
+        } else {
+            sendAccountLockedEmail(toEmail, StringUtils.hasText(businessName) ? businessName : "Đối tác", StringUtils.hasText(reason) ? reason : "Khóa tài khoản đối tác theo yêu cầu quản trị.");
         }
     }
+
+    /**
+     * Gửi email thông báo khóa/mở khóa tài khoản người dùng — HTML Branded Template.
+     */
+    @Async
+    public void sendUserAccountLockStatusEmail(String toEmail, String fullName, boolean isEnabled, String reason) {
+        if (isEnabled) {
+            sendAccountUnlockedEmail(toEmail, StringUtils.hasText(fullName) ? fullName : "Người dùng");
+        } else {
+            sendAccountLockedEmail(toEmail, StringUtils.hasText(fullName) ? fullName : "Người dùng", StringUtils.hasText(reason) ? reason : "Vi phạm điều khoản sử dụng hoặc yêu cầu an toàn hệ thống.");
+        }
+    }
+
+    /**
+     * Gửi email thông báo Nạp tiền Ví thành công.
+     */
+    @Async
+    public void sendWalletTopupSuccessEmail(String toEmail, String fullName, BigDecimal amount, String txnCode, BigDecimal newBalance) {
+        if (mockMail) {
+            log.warn("=== DEV MAIL MOCK === Wallet Topup Success for {}: amount={}, txnCode={} ===", toEmail, amount, txnCode);
+            return;
+        }
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(toEmail);
+            helper.setSubject("💳 Nạp tiền vào Ví thành công — SportsBook");
+            String displayName = StringUtils.hasText(fullName) ? fullName : "Người dùng";
+            String body = "<p>Giao dịch nạp tiền vào ví của bạn đã được xử lý thành công.</p>" +
+                          getDetailCardStart() +
+                          detailRow("Mã giao dịch", "#" + safe(txnCode)) +
+                          detailRow("Số tiền nạp", String.format("%,d VNĐ", amount != null ? amount.longValue() : 0)) +
+                          (newBalance != null ? detailRow("Số dư Ví hiện tại", String.format("%,d VNĐ", newBalance.longValue())) : "") +
+                          detailRow("Thời gian", LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"))) +
+                          getDetailCardEnd() +
+                          "<p>Cảm ơn bạn đã sử dụng dịch vụ của SportsBook!</p>";
+            helper.setText(buildEmailLayout("Nạp tiền thành công", "Xin chào " + displayName, "Thành công", "#10b981", body), true);
+            mailSender.send(message);
+            log.info("Wallet topup success email sent to {}", toEmail);
+        } catch (MessagingException | MailException e) {
+            log.error("Failed to send wallet topup success email to {}", toEmail, e);
+        }
+    }
+
+    /**
+     * Gửi email thông báo Rút tiền Ví thành công.
+     */
+    @Async
+    public void sendWalletWithdrawalSuccessEmail(String toEmail, String fullName, BigDecimal amount, String txnCode, BigDecimal newBalance) {
+        if (mockMail) {
+            log.warn("=== DEV MAIL MOCK === Wallet Withdrawal Success for {}: amount={}, txnCode={} ===", toEmail, amount, txnCode);
+            return;
+        }
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(toEmail);
+            helper.setSubject("💸 Rút tiền từ Ví thành công — SportsBook");
+            String displayName = StringUtils.hasText(fullName) ? fullName : "Người dùng";
+            String body = "<p>Yêu cầu rút tiền từ ví của bạn đã được thực hiện thành công.</p>" +
+                          getDetailCardStart() +
+                          detailRow("Mã giao dịch", "#" + safe(txnCode)) +
+                          detailRow("Số tiền rút", String.format("%,d VNĐ", amount != null ? amount.longValue() : 0)) +
+                          (newBalance != null ? detailRow("Số dư Ví còn lại", String.format("%,d VNĐ", newBalance.longValue())) : "") +
+                          detailRow("Thời gian", LocalDateTime.now().format(DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"))) +
+                          getDetailCardEnd() +
+                          "<p>Tiền đã được chuyển vào tài khoản ngân hàng của bạn. Cảm ơn bạn!</p>";
+            helper.setText(buildEmailLayout("Rút tiền thành công", "Xin chào " + displayName, "Thành công", "#10b981", body), true);
+            mailSender.send(message);
+            log.info("Wallet withdrawal success email sent to {}", toEmail);
+        } catch (MessagingException | MailException e) {
+            log.error("Failed to send wallet withdrawal success email to {}", toEmail, e);
+        }
+    }
+
 
     /**
      * Gửi email nhắc lịch chơi sắp tới.

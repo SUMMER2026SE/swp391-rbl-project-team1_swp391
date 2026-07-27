@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/landing/Footer";
@@ -89,6 +90,22 @@ export default function AppealPage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Dung lượng ảnh tối đa là 5MB");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === "string") {
+        setEvidenceText((prev) => (prev ? `${prev}\n${reader.result}` : (reader.result as string)));
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   if (status === "loading" || loading) {
@@ -183,21 +200,33 @@ export default function AppealPage() {
                     value={appealText}
                     onChange={(event) => setAppealText(event.target.value)}
                     disabled={pendingAppeal || submitting}
-                    rows={6}
+                    rows={5}
                     maxLength={2000}
+                    placeholder="Mô tả chi tiết lý do bạn cho rằng tài khoản bị khóa do nhầm lẫn..."
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="evidenceUrls">Bằng chứng</Label>
-                  <Textarea
-                    id="evidenceUrls"
-                    value={evidenceText}
-                    onChange={(event) => setEvidenceText(event.target.value)}
-                    disabled={pendingAppeal || submitting}
-                    rows={4}
-                    placeholder="Mỗi dòng một URL, tối đa 5 URL"
-                  />
+                  <Label htmlFor="evidenceUrls">Bằng chứng (Upload Ảnh / URL)</Label>
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center gap-3">
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageFileChange}
+                        disabled={pendingAppeal || submitting}
+                        className="cursor-pointer text-sm"
+                      />
+                    </div>
+                    <Textarea
+                      id="evidenceUrls"
+                      value={evidenceText}
+                      onChange={(event) => setEvidenceText(event.target.value)}
+                      disabled={pendingAppeal || submitting}
+                      rows={3}
+                      placeholder="Mỗi dòng một URL ảnh hoặc chuỗi dữ liệu ảnh bằng chứng..."
+                    />
+                  </div>
                 </div>
 
                 <Button type="submit" disabled={pendingAppeal || submitting}>

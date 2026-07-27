@@ -33,6 +33,9 @@ class AdminAccountLockServiceTest {
     private NotificationService notificationService;
 
     @Mock
+    private EmailService emailService;
+
+    @Mock
     private UserRepository userRepository;
 
     @Mock
@@ -45,6 +48,9 @@ class AdminAccountLockServiceTest {
     void applyLockState_Lock_RecordsHistoryAndNotifiesUser() {
         User user = User.builder()
                 .userId(2)
+                .email("customer@example.com")
+                .firstName("Nguyen")
+                .lastName("An")
                 .accountStatus(AccountStatus.ACTIVE)
                 .build();
 
@@ -62,12 +68,16 @@ class AdminAccountLockServiceTest {
                 contains("Violation"),
                 eq(NotificationType.ACCOUNT_LOCK),
                 eq("USER-2"));
+        verify(emailService).sendUserAccountLockStatusEmail(eq("customer@example.com"), eq("Nguyen An"), eq(false), eq("Violation"));
     }
 
     @Test
     void applyLockState_Unlock_ClearsReasonAndDoesNotNotify() {
         User user = User.builder()
                 .userId(2)
+                .email("customer@example.com")
+                .firstName("Nguyen")
+                .lastName("An")
                 .accountStatus(AccountStatus.BLOCKED)
                 .lockReason("Violation")
                 .build();
@@ -86,6 +96,7 @@ class AdminAccountLockServiceTest {
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any());
+        verify(emailService).sendUserAccountLockStatusEmail(eq("customer@example.com"), eq("Nguyen An"), eq(true), eq(null));
     }
 
     @Test
