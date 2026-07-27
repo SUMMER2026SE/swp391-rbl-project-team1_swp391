@@ -38,6 +38,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useDebounceValue } from "usehooks-ts";
+import { useConfirm } from "@/hooks/useConfirm";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 
 
 export interface AdminCustomerResponse {
@@ -174,6 +176,7 @@ function AdminCustomersContent() {
     setSelectedCustomer(customer);
     setLockReason("");
     setLockDialogOpen(true);
+  };
   };
 
   return (

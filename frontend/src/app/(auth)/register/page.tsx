@@ -332,11 +332,11 @@ function RegisterContent() {
                           </FormControl>
                           <p className="text-sm font-normal text-muted-foreground leading-none">
                             Tôi đồng ý với{" "}
-                            <Link href="#" className="text-primary hover:underline">
+                            <Link href="/terms" target="_blank" className="text-primary hover:underline font-medium">
                               Điều khoản sử dụng
                             </Link>
                             {" "}và{" "}
-                            <Link href="#" className="text-primary hover:underline">
+                            <Link href="/privacy" target="_blank" className="text-primary hover:underline font-medium">
                               Chính sách bảo mật
                             </Link>
                           </p>
@@ -617,11 +617,11 @@ function RegisterContent() {
                           </FormControl>
                           <p className="text-sm font-normal text-muted-foreground leading-none">
                             Tôi đồng ý với{" "}
-                            <Link href="#" className="text-primary hover:underline">
+                            <Link href="/terms" target="_blank" className="text-primary hover:underline font-medium">
                               Điều khoản dịch vụ đối tác
                             </Link>
                             {" "}và{" "}
-                            <Link href="#" className="text-primary hover:underline">
+                            <Link href="/privacy" target="_blank" className="text-primary hover:underline font-medium">
                               Chính sách bảo mật kinh doanh
                             </Link>
                           </p>
