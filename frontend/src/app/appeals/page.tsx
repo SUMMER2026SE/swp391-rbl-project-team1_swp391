@@ -91,46 +91,53 @@ export default function AppealPage() {
   };
 
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (evidenceList.length >= 5) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    if (evidenceList.length + files.length > 5) {
       setError("Chỉ được gửi tối đa 5 bằng chứng.");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setError("Dung lượng ảnh tối đa là 10MB");
-      return;
-    }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        let width = img.width;
-        let height = img.height;
-        const MAX_DIM = 800;
+    files.forEach((file) => {
+      if (file.size > 10 * 1024 * 1024) {
+        setError(`Dung lượng ảnh "${file.name}" vượt quá 10MB`);
+        return;
+      }
 
-        if (width > MAX_DIM || height > MAX_DIM) {
-          if (width > height) {
-            height = Math.round((height * MAX_DIM) / width);
-            width = MAX_DIM;
-          } else {
-            width = Math.round((width * MAX_DIM) / height);
-            height = MAX_DIM;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          let width = img.width;
+          let height = img.height;
+          const MAX_DIM = 800;
+
+          if (width > MAX_DIM || height > MAX_DIM) {
+            if (width > height) {
+              height = Math.round((height * MAX_DIM) / width);
+              width = MAX_DIM;
+            } else {
+              width = Math.round((width * MAX_DIM) / height);
+              height = MAX_DIM;
+            }
           }
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        ctx?.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-        setEvidenceList((prev) => [...prev, dataUrl]);
-        setError(null);
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+          setEvidenceList((prev) => {
+            if (prev.length >= 5) return prev;
+            return [...prev, dataUrl];
+          });
+          setError(null);
+        };
+        img.src = event.target?.result as string;
       };
-      img.src = event.target?.result as string;
-    };
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
+    });
 
     e.target.value = "";
   };
@@ -310,6 +317,7 @@ export default function AppealPage() {
                       <Input
                         type="file"
                         accept="image/*"
+                        multiple
                         onChange={handleImageFileChange}
                         disabled={pendingAppeal || submitting || evidenceList.length >= 5}
                         className="cursor-pointer text-sm"
