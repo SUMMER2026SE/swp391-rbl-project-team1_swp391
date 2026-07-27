@@ -38,11 +38,12 @@ export default function TermsPage() {
             </ul>
 
             <h2 className="text-2xl font-bold text-slate-800 mt-8 mb-4 border-b pb-2">4. Chính sách Hủy lịch và Hoàn tiền</h2>
-            <p>Việc hủy lịch phụ thuộc vào quy định cụ thể của Chủ sân (được hiển thị rõ ở bước thanh toán). Nhìn chung, chính sách chung áp dụng như sau:</p>
+            <p>SportVenue áp dụng chính sách hoàn tiền tự động minh bạch dựa trên thời điểm người chơi bấm thực hiện hủy đơn:</p>
             <ul className="list-disc pl-5 space-y-2">
-              <li><strong>Hủy sớm (Thường trước 12h-24h):</strong> Miễn phí hủy, hoàn trả 100% tiền cọc/tiền sân vào Ví SportsBook hoặc tài khoản gốc.</li>
-              <li><strong>Hủy trễ hoặc Không đến:</strong> Có thể mất một phần hoặc toàn bộ số tiền đã cọc tùy theo quy định của sân.</li>
-              <li><strong>Trường hợp bất khả kháng:</strong> (Thiên tai, bão lụt, sự cố kỹ thuật từ phía sân) Người chơi được hoàn tiền 100% mà không chịu phí phạt.</li>
+              <li><strong>Hủy trước giờ nhận sân từ 24 giờ trở lên (≥ 24h):</strong> Hoàn trả <strong>100%</strong> số tiền đã cọc/thanh toán vào Ví tài khoản hoặc tài khoản ngân hàng ban đầu.</li>
+              <li><strong>Hủy trước giờ nhận sân từ 12 đến 24 giờ (12h - 24h):</strong> Hoàn trả <strong>50%</strong> số tiền cọc/thanh toán. 50% còn lại dùng để bồi thường chi phí giữ khung giờ của Chủ sân.</li>
+              <li><strong>Hủy trước giờ nhận sân dưới 12 giờ (&lt; 12h):</strong> Không áp dụng hoàn tiền tự động.</li>
+              <li><strong>Trường hợp bão lũ / sự cố kỹ thuật tại sân:</strong> Người chơi gửi đơn <em>Yêu cầu hoàn tiền ngoại lệ (Refund Exception)</em> kèm bằng chứng để được Admin và Chủ sân duyệt hoàn tiền 100%.</li>
             </ul>
 
             <h2 className="text-2xl font-bold text-slate-800 mt-8 mb-4 border-b pb-2">5. Trách nhiệm và Miễn trừ</h2>

@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { TermsAndCancellationModal } from "@/components/booking/TermsAndCancellationModal";
 import { Separator } from "@/components/ui/separator";
 import { CreditCard, Banknote, Shield, Clock, WalletCards, AlertCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
@@ -62,6 +64,8 @@ function PaymentContent() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [walletConfirmOpen, setWalletConfirmOpen] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [termsModalOpen, setTermsModalOpen] = useState(false);
 
   useEffect(() => {
     const data = sessionStorage.getItem("booking_summary");
@@ -423,6 +427,30 @@ function PaymentContent() {
             </CardContent>
           </Card>
 
+          {/* Checkbox xác nhận Điều khoản & Chính sách Hủy sân / Hoàn tiền */}
+          <div className="flex items-start space-x-3 rounded-xl border bg-slate-50 p-4 shadow-xs">
+            <Checkbox
+              id="acceptedTerms"
+              checked={acceptedTerms}
+              onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
+              className="mt-0.5"
+            />
+            <Label htmlFor="acceptedTerms" className="text-xs sm:text-sm text-slate-700 leading-relaxed cursor-pointer font-medium">
+              Tôi đã đọc và đồng ý với{" "}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setTermsModalOpen(true);
+                }}
+                className="font-bold text-emerald-700 underline hover:text-emerald-800"
+              >
+                Quy định hủy sân & chính sách hoàn tiền
+              </button>{" "}
+              của SportVenue.
+            </Label>
+          </div>
+
           <Button
             className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-6 rounded-lg text-lg shadow-sm transition-all"
             size="lg"
@@ -434,6 +462,7 @@ function PaymentContent() {
               }
             }}
             disabled={
+              !acceptedTerms ||
               isSubmitting ||
               (paymentMethod === "wallet" && !walletSufficientForFull) ||
               (paymentMethod === "wallet_deposit" && !walletSufficientForDeposit)
@@ -496,6 +525,13 @@ function PaymentContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Terms & Cancellation Policy Modal */}
+      <TermsAndCancellationModal
+        open={termsModalOpen}
+        onOpenChange={setTermsModalOpen}
+        onAccept={() => setAcceptedTerms(true)}
+      />
 
       <Footer />
     </div>
