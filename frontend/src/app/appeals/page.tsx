@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Clock, Loader2, ShieldAlert } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Loader2, ShieldAlert, X, Plus } from "lucide-react";
 import api from "@/lib/api";
 import type { ApiResponse } from "@/types/common";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +39,8 @@ export default function AppealPage() {
   const router = useRouter();
   const [appeal, setAppeal] = useState<Appeal | null>(null);
   const [appealText, setAppealText] = useState("");
-  const [evidenceText, setEvidenceText] = useState("");
+  const [evidenceList, setEvidenceList] = useState<string[]>([]);
+  const [urlInput, setUrlInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -48,10 +49,6 @@ export default function AppealPage() {
   const user = session?.user;
   const isBlocked = user?.accountStatus === "BLOCKED";
   const pendingAppeal = appeal?.status === "PENDING";
-  const evidenceUrls = useMemo(
-    () => evidenceText.split(/\r?\n/).map((url) => url.trim()).filter(Boolean).slice(0, 5),
-    [evidenceText]
-  );
 
   useEffect(() => {
     if (status === "loading") return;
@@ -79,11 +76,12 @@ export default function AppealPage() {
     try {
       const { data } = await api.post<ApiResponse<Appeal>>("/appeals", {
         appealText: appealText.trim(),
-        evidenceUrls,
+        evidenceUrls: evidenceList,
       });
       setAppeal(data.result);
       setAppealText("");
-      setEvidenceText("");
+      setEvidenceList([]);
+      setUrlInput("");
       setMessage("Kháng cáo đã được gửi tới Admin.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể gửi kháng cáo.");
@@ -95,10 +93,15 @@ export default function AppealPage() {
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (evidenceList.length >= 5) {
+      setError("Chỉ được gửi tối đa 5 bằng chứng.");
+      return;
+    }
     if (file.size > 10 * 1024 * 1024) {
       setError("Dung lượng ảnh tối đa là 10MB");
       return;
     }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
@@ -122,11 +125,30 @@ export default function AppealPage() {
         const ctx = canvas.getContext("2d");
         ctx?.drawImage(img, 0, 0, width, height);
         const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-        setEvidenceText((prev) => (prev ? `${prev}\n${dataUrl}` : dataUrl));
+        setEvidenceList((prev) => [...prev, dataUrl]);
+        setError(null);
       };
       img.src = event.target?.result as string;
     };
     reader.readAsDataURL(file);
+
+    // Reset input
+    e.target.value = "";
+  };
+
+  const removeEvidence = (index: number) => {
+    setEvidenceList((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const addUrlEvidence = () => {
+    if (!urlInput.trim()) return;
+    if (evidenceList.length >= 5) {
+      setError("Chỉ được gửi tối đa 5 bằng chứng.");
+      return;
+    }
+    setEvidenceList((prev) => [...prev, urlInput.trim()]);
+    setUrlInput("");
+    setError(null);
   };
 
   if (status === "loading" || loading) {
@@ -195,6 +217,22 @@ export default function AppealPage() {
                     Ghi chú Admin: {appeal.adminNote}
                   </div>
                 )}
+                {appeal.evidenceUrls && appeal.evidenceUrls.length > 0 && (
+                  <div className="space-y-2 pt-2">
+                    <span className="font-medium text-slate-700">Bằng chứng đã đính kèm:</span>
+                    <div className="flex flex-wrap gap-2">
+                      {appeal.evidenceUrls.map((url, idx) => (
+                        <a key={idx} href={url} target="_blank" rel="noreferrer" className="block">
+                          {url.startsWith("data:image") || url.match(/\.(jpeg|jpg|gif|png|webp)/i) || url.startsWith("http") ? (
+                            <img src={url} alt={`Bằng chứng ${idx + 1}`} className="h-16 w-16 rounded-md object-cover border" />
+                          ) : (
+                            <span className="text-xs text-emerald-700 underline">{url}</span>
+                          )}
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -227,27 +265,67 @@ export default function AppealPage() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="evidenceUrls">Bằng chứng (Upload Ảnh / URL)</Label>
-                  <div className="flex flex-col gap-3">
-                    <div className="flex items-center gap-3">
+                <div className="space-y-3">
+                  <Label>Bằng chứng đính kèm (Tối đa 5 hình ảnh / URL)</Label>
+                  
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="relative">
                       <Input
                         type="file"
                         accept="image/*"
                         onChange={handleImageFileChange}
-                        disabled={pendingAppeal || submitting}
+                        disabled={pendingAppeal || submitting || evidenceList.length >= 5}
                         className="cursor-pointer text-sm"
                       />
                     </div>
-                    <Textarea
-                      id="evidenceUrls"
-                      value={evidenceText}
-                      onChange={(event) => setEvidenceText(event.target.value)}
-                      disabled={pendingAppeal || submitting}
-                      rows={3}
-                      placeholder="Mỗi dòng một URL ảnh hoặc chuỗi dữ liệu ảnh bằng chứng..."
-                    />
+                    <div className="flex flex-1 items-center gap-2 min-w-[240px]">
+                      <Input
+                        placeholder="Hoặc dán URL ảnh bằng chứng..."
+                        value={urlInput}
+                        onChange={(e) => setUrlInput(e.target.value)}
+                        disabled={pendingAppeal || submitting || evidenceList.length >= 5}
+                        className="text-sm"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={addUrlEvidence}
+                        disabled={pendingAppeal || submitting || !urlInput.trim() || evidenceList.length >= 5}
+                      >
+                        <Plus className="mr-1 h-4 w-4" />
+                        Thêm
+                      </Button>
+                    </div>
                   </div>
+
+                  {/* Thumbnail Previews Grid */}
+                  {evidenceList.length > 0 && (
+                    <div className="flex flex-wrap gap-3 pt-2">
+                      {evidenceList.map((item, idx) => (
+                        <div key={idx} className="relative group rounded-lg border bg-white p-1.5 shadow-sm">
+                          {item.startsWith("data:image") || item.match(/\.(jpeg|jpg|gif|png|webp)/i) || item.startsWith("http") ? (
+                            <img
+                              src={item}
+                              alt={`Bằng chứng ${idx + 1}`}
+                              className="h-20 w-20 rounded-md object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-20 w-20 items-center justify-center rounded-md bg-slate-100 p-2 text-xs text-slate-600 break-all overflow-hidden">
+                              {item}
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeEvidence(idx)}
+                            disabled={pendingAppeal || submitting}
+                            className="absolute -top-2 -right-2 rounded-full bg-rose-600 p-1 text-white shadow hover:bg-rose-700 transition-colors"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <Button type="submit" disabled={pendingAppeal || submitting}>

@@ -159,19 +159,25 @@ export default function AdminAppealsPage() {
                 </div>
 
                 {appeal.evidenceUrls.length > 0 && (
-                  <div className="space-y-1 text-sm">
-                    <div className="font-medium text-slate-700">Bằng chứng</div>
-                    {appeal.evidenceUrls.map((url) => (
-                      <a
-                        key={url}
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block break-all text-emerald-700 hover:underline"
-                      >
-                        {url}
-                      </a>
-                    ))}
+                  <div className="space-y-2 text-sm">
+                    <div className="font-medium text-slate-700">Bằng chứng ({appeal.evidenceUrls.length})</div>
+                    <div className="flex flex-wrap gap-3">
+                      {appeal.evidenceUrls.map((url, idx) => (
+                        <a key={idx} href={url} target="_blank" rel="noreferrer" className="block shrink-0">
+                          {url.startsWith("data:image") || url.match(/\.(jpeg|jpg|gif|png|webp)/i) || url.startsWith("http") ? (
+                            <img
+                              src={url}
+                              alt={`Bằng chứng ${idx + 1}`}
+                              className="h-24 w-24 rounded-lg border object-cover shadow-sm transition-transform hover:scale-105"
+                            />
+                          ) : (
+                            <span className="block max-w-xs break-all text-xs text-emerald-700 underline">
+                              {url}
+                            </span>
+                          )}
+                        </a>
+                      ))}
+                    </div>
                   </div>
                 )}
 
