@@ -10,6 +10,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
+import { useRouter, useSearchParams } from "next/navigation";
+
 type AppealStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 type Appeal = {
@@ -40,12 +42,27 @@ function statusBadge(status: AppealStatus) {
 }
 
 export default function AdminAppealsPage() {
-  const [status, setStatus] = useState<AppealStatus>("PENDING");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const getInitialStatus = (): AppealStatus => {
+    const raw = searchParams?.get("status")?.toUpperCase();
+    if (raw === "APPROVED" || raw === "ACCEPT" || raw === "ACCEPTED") return "APPROVED";
+    if (raw === "REJECTED") return "REJECTED";
+    return "PENDING";
+  };
+
+  const [status, setStatus] = useState<AppealStatus>(getInitialStatus);
   const [appeals, setAppeals] = useState<Appeal[]>([]);
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [reviewingId, setReviewingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const handleStatusChange = (newStatus: AppealStatus) => {
+    setStatus(newStatus);
+    router.push(`/admin/appeals?status=${newStatus}`);
+  };
 
   const loadAppeals = async () => {
     setLoading(true);
@@ -95,7 +112,7 @@ export default function AdminAppealsPage() {
             <button
               key={option}
               type="button"
-              onClick={() => setStatus(option)}
+              onClick={() => handleStatusChange(option)}
               className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
                 status === option ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-100"
               }`}

@@ -35,6 +35,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { useDebounceValue } from "usehooks-ts";
 
 
@@ -146,27 +148,32 @@ function AdminCustomersContent() {
     });
   };
 
+  // Lock/Unlock dialog state
+  const [lockDialogOpen, setLockDialogOpen] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<AdminCustomerResponse | null>(null);
+  const [lockReason, setLockReason] = useState("");
+
   const lockUnlockMutation = useMutation({
-    mutationFn: async ({ id, enabled }: { id: number; enabled: boolean }) => {
-      const { data } = await api.patch(`/admin/customers/${id}/lock`, { enabled });
+    mutationFn: async ({ id, enabled, reason }: { id: number; enabled: boolean; reason?: string }) => {
+      const { data } = await api.patch(`/admin/customers/${id}/lock`, { enabled, reason });
       return data;
     },
-    onSuccess: (data) => {
-      toast.success(data.message || "Thao tác thành công");
+    onSuccess: (data, variables) => {
+      toast.success(data.message || (variables.enabled ? "Đã mở khóa tài khoản khách hàng!" : "Đã khóa tài khoản khách hàng!"));
       queryClient.invalidateQueries({ queryKey: ["admin-customers"] });
+      setLockDialogOpen(false);
+      setSelectedCustomer(null);
+      setLockReason("");
     },
     onError: (error: ApiError) => {
       toast.error(error?.response?.data?.message || error?.message || "Có lỗi xảy ra.");
     }
   });
 
-  const handleLockUnlock = (customer: AdminCustomerResponse) => {
-    const isCurrentlyActive = customer.accountStatus === "ACTIVE";
-    const action = isCurrentlyActive ? "khóa" : "mở khóa";
-    
-    if (confirm(`Bạn có chắc chắn muốn ${action} tài khoản ${customer.email}?`)) {
-      lockUnlockMutation.mutate({ id: customer.userId, enabled: !isCurrentlyActive });
-    }
+  const openLockModal = (customer: AdminCustomerResponse) => {
+    setSelectedCustomer(customer);
+    setLockReason("");
+    setLockDialogOpen(true);
   };
 
   return (
@@ -309,7 +316,7 @@ function AdminCustomersContent() {
                     <Button
                       variant={customer.accountStatus === "ACTIVE" ? "destructive" : "default"}
                       size="sm"
-                      onClick={() => handleLockUnlock(customer)}
+                      onClick={() => openLockModal(customer)}
                       disabled={lockUnlockMutation.isPending && lockUnlockMutation.variables?.id === customer.userId}
                       className={customer.accountStatus !== "ACTIVE" ? "bg-emerald-500 hover:bg-emerald-600" : ""}
                     >
@@ -351,6 +358,66 @@ function AdminCustomersContent() {
           </Button>
         </div>
       </div>
+
+      {/* Dialog Modal Khóa / Mở khóa tài khoản khách hàng */}
+      <Dialog open={lockDialogOpen} onOpenChange={setLockDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedCustomer?.accountStatus === "ACTIVE"
+                ? `Khóa tài khoản ${selectedCustomer?.fullName}`
+                : `Mở khóa tài khoản ${selectedCustomer?.fullName}`}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedCustomer?.accountStatus === "ACTIVE"
+                ? `Vui lòng nhập lý do khóa tài khoản khách hàng (${selectedCustomer?.email}). Lý do này sẽ được gửi tới Email của khách hàng.`
+                : `Xác nhận mở khóa tài khoản khách hàng (${selectedCustomer?.email}).`}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedCustomer?.accountStatus === "ACTIVE" && (
+            <div className="grid gap-2 py-2">
+              <Label htmlFor="customerLockReason" className="text-sm font-medium">
+                Lý do khóa tài khoản <span className="text-rose-500">*</span>
+              </Label>
+              <Textarea
+                id="customerLockReason"
+                value={lockReason}
+                onChange={(e) => setLockReason(e.target.value)}
+                placeholder="Nhập lý do khóa tài khoản (VD: Vi phạm quy định đặt sân, spam đơn...)"
+                rows={3}
+              />
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setLockDialogOpen(false)}>
+              Hủy
+            </Button>
+            <Button
+              type="button"
+              variant={selectedCustomer?.accountStatus === "ACTIVE" ? "destructive" : "default"}
+              disabled={
+                lockUnlockMutation.isPending ||
+                (selectedCustomer?.accountStatus === "ACTIVE" && !lockReason.trim())
+              }
+              onClick={() => {
+                if (!selectedCustomer) return;
+                const isCurrentlyActive = selectedCustomer.accountStatus === "ACTIVE";
+                lockUnlockMutation.mutate({
+                  id: selectedCustomer.userId,
+                  enabled: !isCurrentlyActive,
+                  reason: isCurrentlyActive ? lockReason.trim() : undefined,
+                });
+              }}
+              className={selectedCustomer?.accountStatus !== "ACTIVE" ? "bg-emerald-600 hover:bg-emerald-700" : ""}
+            >
+              {lockUnlockMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {selectedCustomer?.accountStatus === "ACTIVE" ? "Xác nhận khóa" : "Xác nhận mở khóa"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
