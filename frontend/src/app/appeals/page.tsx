@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Clock, Loader2, ShieldAlert, X, Plus, LogOut, Home } from "lucide-react";
@@ -51,8 +51,6 @@ export default function AppealPage() {
   const pendingAppeal = appeal?.status === "PENDING";
   const isApproved = appeal?.status === "APPROVED";
 
-  const hasUpdatedRef = useRef(false);
-
   useEffect(() => {
     if (status === "loading") return;
     if (status === "unauthenticated") {
@@ -61,14 +59,7 @@ export default function AppealPage() {
     }
 
     api.get<ApiResponse<Appeal | null>>("/appeals/me")
-      .then((res) => {
-        const result = res.data.result ?? null;
-        setAppeal(result);
-        if (result?.status === "APPROVED" && !hasUpdatedRef.current) {
-          hasUpdatedRef.current = true;
-          update(); // Tự động làm mới session NextAuth đúng 1 lần khi kháng cáo được duyệt
-        }
-      })
+      .then((res) => setAppeal(res.data.result ?? null))
       .catch(() => setAppeal(null))
       .finally(() => setLoading(false));
   }, [status, router]);
