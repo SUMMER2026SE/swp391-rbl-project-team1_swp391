@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type { Session } from "next-auth";
 import { Loader2, AlertCircle, Sparkles } from "lucide-react";
 import { Header } from "@/components/layout/Header";
@@ -17,6 +17,8 @@ import {
   mapVenueToCard,
   type HomeDashboardResponse,
 } from "@/lib/home-api";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 
 type AuthenticatedHomePageProps = {
@@ -43,6 +45,7 @@ function HomeLoadingShell() {
 }
 
 export function AuthenticatedHomePage({ user }: AuthenticatedHomePageProps) {
+  const router = useRouter();
   const displayName =
     [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
     user.name?.trim() ||
@@ -53,20 +56,30 @@ export function AuthenticatedHomePage({ user }: AuthenticatedHomePageProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadDashboard = () => {
+  const isBlocked = user.accountStatus === "BLOCKED" || error?.toLowerCase().includes("khóa") || error?.toLowerCase().includes("kháng cáo");
+
+  const loadDashboard = useCallback(() => {
+    if (user.accountStatus === "BLOCKED") {
+      router.replace("/appeals");
+      return;
+    }
     setLoading(true);
     setError(null);
     fetchHomeDashboard()
       .then(setDashboard)
       .catch((err: unknown) => {
-        setError(err instanceof Error ? err.message : "Không tải được dữ liệu trang chủ.");
+        const msg = err instanceof Error ? err.message : "Không tải được dữ liệu trang chủ.";
+        setError(msg);
+        if (msg.toLowerCase().includes("khóa") || msg.toLowerCase().includes("kháng cáo")) {
+          router.replace("/appeals");
+        }
       })
       .finally(() => setLoading(false));
-  };
+  }, [user.accountStatus, router]);
 
   useEffect(() => {
     loadDashboard();
-  }, []);
+  }, [loadDashboard]);
 
   if (loading) {
     return <HomeLoadingShell />;
@@ -80,12 +93,22 @@ export function AuthenticatedHomePage({ user }: AuthenticatedHomePageProps) {
         <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 py-24">
           <AlertCircle className="h-12 w-12 text-destructive" />
           <p className="text-center text-muted-foreground">{error ?? "Lỗi không xác định"}</p>
-          <Button
-            onClick={loadDashboard}
-            className="home-cta-shine rounded-xl bg-green-800 hover:bg-green-900"
-          >
-            Thử lại
-          </Button>
+          <div className="flex items-center gap-3">
+            {isBlocked ? (
+              <Link href="/appeals">
+                <Button className="rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white">
+                  Gửi kháng cáo mở khóa ngay
+                </Button>
+              </Link>
+            ) : (
+              <Button
+                onClick={loadDashboard}
+                className="home-cta-shine rounded-xl bg-green-800 hover:bg-green-900"
+              >
+                Thử lại
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     );
