@@ -48,8 +48,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ErrorResponse> handleUnauthorized(AuthenticationException ex) {
+        log.warn("Authentication failed: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ErrorResponse.of(HttpStatus.UNAUTHORIZED.value(), "Xác thực không thành công: " + ex.getMessage()));
+                .body(ErrorResponse.of(HttpStatus.UNAUTHORIZED.value(), "Xác thực không thành công. Vui lòng đăng nhập lại."));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
@@ -132,22 +133,21 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(PaymentGatewayRefundException.class)
     public ResponseEntity<ErrorResponse> handlePaymentGatewayRefundException(PaymentGatewayRefundException ex) {
-        log.error("Payment Gateway Refund Error: {}", ex.getMessage());
+        log.error("Payment Gateway Refund Error: {}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                 .body(ErrorResponse.of(
                         HttpStatus.BAD_GATEWAY.value(),
-                        "Lỗi kết nối cổng thanh toán: " + ex.getMessage()
+                        "Không thể kết nối cổng thanh toán. Vui lòng thử lại sau."
                 ));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) {
-        String msg = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
-        log.error("Unhandled exception [{}]: {}", ex.getClass().getSimpleName(), msg, ex);
+        log.error("Unhandled exception [{}]: {}", ex.getClass().getName(), ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ErrorResponse.of(
                         HttpStatus.INTERNAL_SERVER_ERROR.value(),
-                        "Lỗi hệ thống: " + msg
+                        "Đã xảy ra lỗi hệ thống. Vui lòng thử lại sau."
                 ));
     }
 }
