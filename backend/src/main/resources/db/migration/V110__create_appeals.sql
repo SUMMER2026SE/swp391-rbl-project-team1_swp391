@@ -18,7 +18,7 @@ CREATE TABLE appeals (
 
 CREATE TABLE appeal_evidence_urls (
     appeal_id INTEGER NOT NULL,
-    evidence_url VARCHAR(1024) NOT NULL,
+    evidence_url TEXT NOT NULL,
     CONSTRAINT fk_appeal_evidence_urls_appeal
         FOREIGN KEY (appeal_id) REFERENCES appeals(appeal_id) ON DELETE CASCADE
 );

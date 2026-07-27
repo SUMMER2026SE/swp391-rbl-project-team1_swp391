@@ -55,8 +55,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
         log.warn("Data integrity violation: {}", ex.getMessage());
+        String detailMessage = ex.getMessage();
+        if (detailMessage != null && (detailMessage.toLowerCase().contains("value too long") || detailMessage.toLowerCase().contains("varying"))) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ErrorResponse.of(HttpStatus.BAD_REQUEST.value(), "Dữ liệu đính kèm (hình ảnh) vượt quá dung lượng cho phép. Vui lòng chọn ảnh nhỏ hơn."));
+        }
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ErrorResponse.of(HttpStatus.CONFLICT.value(), "Yêu cầu này không thể thực hiện vì thông tin đã tồn tại. Vui lòng kiểm tra lại."));
+                .body(ErrorResponse.of(HttpStatus.CONFLICT.value(), "Yêu cầu này không thể thực hiện vì dữ liệu không hợp lệ hoặc đã tồn tại. Vui lòng kiểm tra lại."));
     }
 
     @ExceptionHandler(DuplicateResourceException.class)
