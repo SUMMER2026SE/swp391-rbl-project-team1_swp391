@@ -8,6 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
+
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type AppealStatus = "PENDING" | "APPROVED" | "REJECTED";
 
@@ -39,12 +43,27 @@ function statusBadge(status: AppealStatus) {
 }
 
 export default function AdminAppealsPage() {
-  const [status, setStatus] = useState<AppealStatus>("PENDING");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const getInitialStatus = (): AppealStatus => {
+    const raw = searchParams?.get("status")?.toUpperCase();
+    if (raw === "APPROVED" || raw === "ACCEPT" || raw === "ACCEPTED") return "APPROVED";
+    if (raw === "REJECTED") return "REJECTED";
+    return "PENDING";
+  };
+
+  const [status, setStatus] = useState<AppealStatus>(getInitialStatus);
   const [appeals, setAppeals] = useState<Appeal[]>([]);
   const [notes, setNotes] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [reviewingId, setReviewingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const handleStatusChange = (newStatus: AppealStatus) => {
+    setStatus(newStatus);
+    router.push(`/admin/appeals?status=${newStatus}`);
+  };
 
   const loadAppeals = async () => {
     setLoading(true);
@@ -65,6 +84,8 @@ export default function AdminAppealsPage() {
     loadAppeals();
   }, [status]);
 
+  const queryClient = useQueryClient();
+
   const reviewAppeal = async (appealId: number, nextStatus: "APPROVED" | "REJECTED") => {
     setReviewingId(appealId);
     setError(null);
@@ -73,6 +94,13 @@ export default function AdminAppealsPage() {
         status: nextStatus,
         adminNote: notes[appealId]?.trim() || undefined,
       });
+      if (nextStatus === "APPROVED") {
+        toast.success("Đã phê duyệt kháng cáo & TỰ ĐỘNG MỞ KHÓA tài khoản người dùng thành công!");
+      } else {
+        toast.info("Đã từ chối đơn kháng cáo.");
+      }
+      queryClient.invalidateQueries({ queryKey: ["admin-customers"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-owners"] });
       await loadAppeals();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể xử lý kháng cáo.");
@@ -89,7 +117,7 @@ export default function AdminAppealsPage() {
             <button
               key={option}
               type="button"
-              onClick={() => setStatus(option)}
+              onClick={() => handleStatusChange(option)}
               className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
                 status === option ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-100"
               }`}
@@ -136,19 +164,25 @@ export default function AdminAppealsPage() {
                 </div>
 
                 {appeal.evidenceUrls.length > 0 && (
-                  <div className="space-y-1 text-sm">
-                    <div className="font-medium text-slate-700">Bằng chứng</div>
-                    {appeal.evidenceUrls.map((url) => (
-                      <a
-                        key={url}
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block break-all text-emerald-700 hover:underline"
-                      >
-                        {url}
-                      </a>
-                    ))}
+                  <div className="space-y-2 text-sm">
+                    <div className="font-medium text-slate-700">Bằng chứng ({appeal.evidenceUrls.length})</div>
+                    <div className="flex flex-wrap gap-3">
+                      {appeal.evidenceUrls.map((url, idx) => (
+                        <a key={idx} href={url} target="_blank" rel="noreferrer" className="block shrink-0">
+                          {url.startsWith("data:image") || url.match(/\.(jpeg|jpg|gif|png|webp)/i) || url.startsWith("http") ? (
+                            <img
+                              src={url}
+                              alt={`Bằng chứng ${idx + 1}`}
+                              className="h-24 w-24 rounded-lg border object-cover shadow-sm transition-transform hover:scale-105"
+                            />
+                          ) : (
+                            <span className="block max-w-xs break-all text-xs text-emerald-700 underline">
+                              {url}
+                            </span>
+                          )}
+                        </a>
+                      ))}
+                    </div>
                   </div>
                 )}
 

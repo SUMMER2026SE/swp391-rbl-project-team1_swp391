@@ -16,7 +16,7 @@ public class CreateAppealRequest {
     @Size(max = 2000, message = "Nội dung kháng cáo không được vượt quá 2000 ký tự")
     private String appealText;
 
-    @Size(max = 5, message = "Chỉ được gửi tối đa 5 đường dẫn bằng chứng")
-    private List<@Size(max = 1024, message = "Đường dẫn bằng chứng không được vượt quá 1024 ký tự") String>
+    @Size(max = 5, message = "Chỉ được gửi tối đa 5 đường dẫn hoặc hình ảnh bằng chứng")
+    private List<@Size(max = 2000000, message = "Dữ liệu bằng chứng không được vượt quá 2MB") String>
             evidenceUrls = new ArrayList<>();
 }

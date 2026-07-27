@@ -56,7 +56,7 @@ public class Appeal {
 
     @ElementCollection
     @CollectionTable(name = "appeal_evidence_urls", joinColumns = @JoinColumn(name = "appeal_id"))
-    @Column(name = "evidence_url", nullable = false, length = 1024)
+    @Column(name = "evidence_url", nullable = false, columnDefinition = "TEXT")
     @BatchSize(size = 50)
     @Builder.Default
     private List<String> evidenceUrls = new ArrayList<>();

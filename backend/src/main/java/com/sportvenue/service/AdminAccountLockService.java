@@ -17,6 +17,7 @@ public class AdminAccountLockService {
     private final AccountStatusService accountStatusService;
     private final AccountStatusHistoryService accountStatusHistoryService;
     private final NotificationService notificationService;
+    private final EmailService emailService;
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
@@ -42,6 +43,13 @@ public class AdminAccountLockService {
                             + " Bạn có thể gửi kháng cáo trong hệ thống.",
                     NotificationType.ACCOUNT_LOCK,
                     "USER-" + user.getUserId());
+        }
+
+        // Tự động gửi Email thông báo khóa / mở khóa tài khoản cho người dùng
+        try {
+            emailService.sendUserAccountLockStatusEmail(user.getEmail(), user.getFullName(), enabled, reason);
+        } catch (Exception e) {
+            // Log lỗi nếu email không gửi được nhưng không làm rollback giao dịch khóa tài khoản trong DB
         }
 
         return newStatus;

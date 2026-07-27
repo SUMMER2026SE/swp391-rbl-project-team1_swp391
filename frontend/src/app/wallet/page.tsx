@@ -33,6 +33,7 @@ import {
   Calendar,
   AlertCircle,
   Plus,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -78,6 +79,7 @@ function CustomerWalletContent() {
   const [topupOpen, setTopupOpen] = useState(false);
   const [amountInput, setAmountInput] = useState("500000");
   const [submittingTopup, setSubmittingTopup] = useState(false);
+  const [successModalData, setSuccessModalData] = useState<{ amount: number } | null>(null);
 
   const loadWalletData = useCallback(async () => {
     setLoading(true);
@@ -109,11 +111,7 @@ function CustomerWalletContent() {
 
     const amount = searchParams.get("amount");
     if (topupSuccess === "true") {
-      toast.success(
-        amount
-          ? `Nạp tiền thành công! +${Number(amount).toLocaleString("vi-VN")}đ`
-          : "Nạp tiền thành công!"
-      );
+      setSuccessModalData({ amount: amount ? Number(amount) : 0 });
     } else {
       const reason = searchParams.get("reason");
       toast.error(
@@ -358,6 +356,47 @@ function CustomerWalletContent() {
             <Button onClick={handleTopup} disabled={submittingTopup} className="gap-2">
               {submittingTopup && <Loader2 className="h-4 w-4 animate-spin" />}
               Tiếp tục
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Popup Nạp Tiền Thành Công */}
+      <Dialog open={!!successModalData} onOpenChange={() => setSuccessModalData(null)}>
+        <DialogContent className="sm:max-w-md text-center p-6 bg-white rounded-2xl shadow-xl border-emerald-100">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mb-4 animate-pulse">
+            <CheckCircle2 className="h-10 w-10" />
+          </div>
+          <DialogTitle className="text-2xl font-bold text-slate-900">
+            Nạp Tiền Thành Công!
+          </DialogTitle>
+          <DialogDescription className="text-sm text-slate-500 mt-1">
+            Giao dịch nạp tiền vào ví của bạn đã được xác nhận qua VNPay.
+          </DialogDescription>
+          
+          <div className="my-6 rounded-xl bg-slate-50 border border-slate-100 p-4 space-y-2.5 text-left">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-slate-500">Số tiền nạp</span>
+              <span className="font-bold text-emerald-600 text-base">
+                +{successModalData?.amount.toLocaleString("vi-VN")} đ
+              </span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-slate-500">Phương thức</span>
+              <span className="font-medium text-slate-700">VNPay Gateway</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-slate-500">Trạng thái</span>
+              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200">Thành công</Badge>
+            </div>
+          </div>
+
+          <DialogFooter className="sm:justify-center">
+            <Button
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl transition-all shadow-md hover:shadow-lg"
+              onClick={() => setSuccessModalData(null)}
+            >
+              Hoàn tất & Tiếp tục
             </Button>
           </DialogFooter>
         </DialogContent>

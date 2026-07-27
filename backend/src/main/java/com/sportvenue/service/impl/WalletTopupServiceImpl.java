@@ -47,6 +47,7 @@ public class WalletTopupServiceImpl implements WalletTopupService {
     private final UserRepository userRepository;
     private final VNPayConfig vnPayConfig;
     private final WalletService walletService;
+    private final com.sportvenue.service.EmailService emailService;
 
     @Override
     public boolean isTopupCallback(HttpServletRequest request) {
@@ -200,6 +201,16 @@ public class WalletTopupServiceImpl implements WalletTopupService {
             walletService.recordCustomerTransaction(
                     topup.getUser().getUserId(), topup.getAmount(), null,
                     WalletTransactionType.CUSTOMER_TOPUP_CREDIT, "Nạp tiền vào ví");
+            try {
+                emailService.sendWalletTopupSuccessEmail(
+                        topup.getUser().getEmail(),
+                        topup.getUser().getFullName(),
+                        topup.getAmount(),
+                        topup.getTransactionCode(),
+                        null);
+            } catch (Exception e) {
+                log.error("Lỗi khi gửi email nạp ví thành công", e);
+            }
             log.info("VNPay nạp ví THÀNH CÔNG — txnRef={}, userId={}, amount={}",
                     txnRef, topup.getUser().getUserId(), topup.getAmount());
         } else {
