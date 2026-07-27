@@ -177,7 +177,6 @@ function AdminCustomersContent() {
     setLockReason("");
     setLockDialogOpen(true);
   };
-  };
 
   return (
     <div className="space-y-6">
