@@ -49,6 +49,7 @@ export default function AppealPage() {
   const user = session?.user;
   const isBlocked = user?.accountStatus === "BLOCKED";
   const pendingAppeal = appeal?.status === "PENDING";
+  const isApproved = appeal?.status === "APPROVED";
 
   useEffect(() => {
     if (status === "loading") return;
@@ -132,7 +133,6 @@ export default function AppealPage() {
     };
     reader.readAsDataURL(file);
 
-    // Reset input
     e.target.value = "";
   };
 
@@ -159,7 +159,7 @@ export default function AppealPage() {
     );
   }
 
-  if (!isBlocked) {
+  if (!isBlocked && !appeal) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <Header />
@@ -187,19 +187,39 @@ export default function AppealPage() {
       <Header />
       <main className="flex-1 bg-slate-50 px-4 py-10">
         <div className="mx-auto max-w-4xl space-y-6">
-          <section className="rounded-lg border border-rose-200 bg-white p-6">
-            <div className="flex items-start gap-4">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-rose-100">
-                <ShieldAlert className="h-6 w-6 text-rose-600" />
+          {/* Card trạng thái mở khóa thành công khi appeal được APPROVED */}
+          {isApproved ? (
+            <section className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-6">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                  <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                </div>
+                <div className="space-y-3 flex-1">
+                  <h1 className="text-xl font-semibold text-emerald-950">Kháng cáo của bạn đã được chấp nhận!</h1>
+                  <p className="text-sm text-emerald-800">
+                    Admin đã phê duyệt đơn kháng cáo và mở khóa tài khoản của bạn. Vui lòng quay lại Trang chủ để tiếp tục sử dụng các dịch vụ đặt sân.
+                  </p>
+                  <Button onClick={() => router.push("/")} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                    Về trang chủ ngay
+                  </Button>
+                </div>
               </div>
-              <div className="space-y-2">
-                <h1 className="text-2xl font-semibold text-slate-950">Tài khoản của bạn đang bị khóa</h1>
-                <p className="text-sm text-slate-600">
-                  Lý do: {user?.lockReason || "Admin chưa ghi chú lý do cụ thể."}
-                </p>
+            </section>
+          ) : (
+            <section className="rounded-lg border border-rose-200 bg-white p-6">
+              <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-rose-100">
+                  <ShieldAlert className="h-6 w-6 text-rose-600" />
+                </div>
+                <div className="space-y-2">
+                  <h1 className="text-2xl font-semibold text-slate-950">Tài khoản của bạn đang bị khóa</h1>
+                  <p className="text-sm text-slate-600">
+                    Lý do: {user?.lockReason || appeal?.relatedLockReason || "Admin chưa ghi chú lý do cụ thể."}
+                  </p>
+                </div>
               </div>
-            </div>
-          </section>
+            </section>
+          )}
 
           {appeal && (
             <Card>
@@ -237,104 +257,107 @@ export default function AppealPage() {
             </Card>
           )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Gửi kháng cáo</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={submitAppeal} className="space-y-5">
-                {message && <div className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-700">{message}</div>}
-                {error && <div className="rounded-md bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
-                {pendingAppeal && (
-                  <div className="flex items-start gap-2 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                    Bạn đã có một kháng cáo đang chờ xử lý.
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <Label htmlFor="appealText">Nội dung kháng cáo</Label>
-                  <Textarea
-                    id="appealText"
-                    value={appealText}
-                    onChange={(event) => setAppealText(event.target.value)}
-                    disabled={pendingAppeal || submitting}
-                    rows={5}
-                    maxLength={2000}
-                    placeholder="Mô tả chi tiết lý do bạn cho rằng tài khoản bị khóa do nhầm lẫn..."
-                  />
-                </div>
-
-                <div className="space-y-3">
-                  <Label>Bằng chứng đính kèm (Tối đa 5 hình ảnh / URL)</Label>
-                  
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="relative">
-                      <Input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageFileChange}
-                        disabled={pendingAppeal || submitting || evidenceList.length >= 5}
-                        className="cursor-pointer text-sm"
-                      />
-                    </div>
-                    <div className="flex flex-1 items-center gap-2 min-w-[240px]">
-                      <Input
-                        placeholder="Hoặc dán URL ảnh bằng chứng..."
-                        value={urlInput}
-                        onChange={(e) => setUrlInput(e.target.value)}
-                        disabled={pendingAppeal || submitting || evidenceList.length >= 5}
-                        className="text-sm"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={addUrlEvidence}
-                        disabled={pendingAppeal || submitting || !urlInput.trim() || evidenceList.length >= 5}
-                      >
-                        <Plus className="mr-1 h-4 w-4" />
-                        Thêm
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Thumbnail Previews Grid */}
-                  {evidenceList.length > 0 && (
-                    <div className="flex flex-wrap gap-3 pt-2">
-                      {evidenceList.map((item, idx) => (
-                        <div key={idx} className="relative group rounded-lg border bg-white p-1.5 shadow-sm">
-                          {item.startsWith("data:image") || item.match(/\.(jpeg|jpg|gif|png|webp)/i) || item.startsWith("http") ? (
-                            <img
-                              src={item}
-                              alt={`Bằng chứng ${idx + 1}`}
-                              className="h-20 w-20 rounded-md object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-20 w-20 items-center justify-center rounded-md bg-slate-100 p-2 text-xs text-slate-600 break-all overflow-hidden">
-                              {item}
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => removeEvidence(idx)}
-                            disabled={pendingAppeal || submitting}
-                            className="absolute -top-2 -right-2 rounded-full bg-rose-600 p-1 text-white shadow hover:bg-rose-700 transition-colors"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
+          {/* Chỉ hiển thị form Gửi kháng cáo khi kháng cáo KHÔNG phải Đã chấp nhận (APPROVED) */}
+          {!isApproved && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Gửi kháng cáo</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={submitAppeal} className="space-y-5">
+                  {message && <div className="rounded-md bg-emerald-50 p-3 text-sm text-emerald-700">{message}</div>}
+                  {error && <div className="rounded-md bg-rose-50 p-3 text-sm text-rose-700">{error}</div>}
+                  {pendingAppeal && (
+                    <div className="flex items-start gap-2 rounded-md bg-amber-50 p-3 text-sm text-amber-800">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                      Bạn đã có một kháng cáo đang chờ xử lý. Vui lòng chờ Admin xem xét.
                     </div>
                   )}
-                </div>
 
-                <Button type="submit" disabled={pendingAppeal || submitting}>
-                  {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Gửi kháng cáo
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
+                  <div className="space-y-2">
+                    <Label htmlFor="appealText">Nội dung kháng cáo</Label>
+                    <Textarea
+                      id="appealText"
+                      value={appealText}
+                      onChange={(event) => setAppealText(event.target.value)}
+                      disabled={pendingAppeal || submitting}
+                      rows={5}
+                      maxLength={2000}
+                      placeholder="Mô tả chi tiết lý do bạn cho rằng tài khoản bị khóa do nhầm lẫn..."
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label>Bằng chứng đính kèm (Tối đa 5 hình ảnh / URL)</Label>
+                    
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="relative">
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageFileChange}
+                          disabled={pendingAppeal || submitting || evidenceList.length >= 5}
+                          className="cursor-pointer text-sm"
+                        />
+                      </div>
+                      <div className="flex flex-1 items-center gap-2 min-w-[240px]">
+                        <Input
+                          placeholder="Hoặc dán URL ảnh bằng chứng..."
+                          value={urlInput}
+                          onChange={(e) => setUrlInput(e.target.value)}
+                          disabled={pendingAppeal || submitting || evidenceList.length >= 5}
+                          className="text-sm"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={addUrlEvidence}
+                          disabled={pendingAppeal || submitting || !urlInput.trim() || evidenceList.length >= 5}
+                        >
+                          <Plus className="mr-1 h-4 w-4" />
+                          Thêm
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Thumbnail Previews Grid */}
+                    {evidenceList.length > 0 && (
+                      <div className="flex flex-wrap gap-3 pt-2">
+                        {evidenceList.map((item, idx) => (
+                          <div key={idx} className="relative group rounded-lg border bg-white p-1.5 shadow-sm">
+                            {item.startsWith("data:image") || item.match(/\.(jpeg|jpg|gif|png|webp)/i) || item.startsWith("http") ? (
+                              <img
+                                src={item}
+                                alt={`Bằng chứng ${idx + 1}`}
+                                className="h-20 w-20 rounded-md object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-20 w-20 items-center justify-center rounded-md bg-slate-100 p-2 text-xs text-slate-600 break-all overflow-hidden">
+                                {item}
+                              </div>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => removeEvidence(idx)}
+                              disabled={pendingAppeal || submitting}
+                              className="absolute -top-2 -right-2 rounded-full bg-rose-600 p-1 text-white shadow hover:bg-rose-700 transition-colors"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <Button type="submit" disabled={pendingAppeal || submitting}>
+                    {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Gửi kháng cáo
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </main>
       <Footer />
