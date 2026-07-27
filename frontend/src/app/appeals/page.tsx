@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, Clock, Loader2, ShieldAlert, X, Plus } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Loader2, ShieldAlert, X, Plus, LogOut, Home } from "lucide-react";
 import api from "@/lib/api";
 import type { ApiResponse } from "@/types/common";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +35,7 @@ function statusBadge(status: AppealStatus) {
 }
 
 export default function AppealPage() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update } = useSession();
   const router = useRouter();
   const [appeal, setAppeal] = useState<Appeal | null>(null);
   const [appealText, setAppealText] = useState("");
@@ -59,10 +59,16 @@ export default function AppealPage() {
     }
 
     api.get<ApiResponse<Appeal | null>>("/appeals/me")
-      .then((res) => setAppeal(res.data.result ?? null))
+      .then((res) => {
+        const result = res.data.result ?? null;
+        setAppeal(result);
+        if (result?.status === "APPROVED") {
+          update(); // Tự động làm mới session NextAuth khi kháng cáo đã được duyệt
+        }
+      })
       .catch(() => setAppeal(null))
       .finally(() => setLoading(false));
-  }, [status, router]);
+  }, [status, router, update]);
 
   const submitAppeal = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -151,6 +157,12 @@ export default function AppealPage() {
     setError(null);
   };
 
+  const handleGoHome = async () => {
+    await update();
+    router.push("/");
+    router.refresh();
+  };
+
   if (status === "loading" || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -159,22 +171,54 @@ export default function AppealPage() {
     );
   }
 
-  if (!isBlocked && !appeal) {
+  // Khi tài khoản đã mở khóa và không có kháng cáo hoặc kháng cáo đã hoàn tất
+  if (!isBlocked && (!appeal || isApproved)) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <Header />
         <main className="flex-1 bg-slate-50 px-4 py-10">
-          <div className="mx-auto max-w-3xl">
-            <Card>
-              <CardContent className="flex items-center gap-4 p-6">
-                <CheckCircle2 className="h-9 w-9 text-emerald-600" />
-                <div className="flex-1">
-                  <h1 className="text-xl font-semibold text-slate-900">Tài khoản đang hoạt động</h1>
-                  <p className="text-sm text-slate-600">Bạn không cần gửi kháng cáo mở khóa.</p>
+          <div className="mx-auto max-w-3xl space-y-6">
+            <Card className="border-emerald-200 bg-white shadow-sm">
+              <CardContent className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-6">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                  <CheckCircle2 className="h-7 w-7 text-emerald-600" />
                 </div>
-                <Button onClick={() => router.push("/")}>Về trang chủ</Button>
+                <div className="flex-1 space-y-1">
+                  <h1 className="text-xl font-semibold text-slate-900">Tài khoản của bạn đang hoạt động bình thường</h1>
+                  <p className="text-sm text-slate-600">
+                    {isApproved
+                      ? "Admin đã phê duyệt đơn kháng cáo và mở khóa tài khoản thành công."
+                      : "Tài khoản không bị khóa, bạn có thể tiếp tục sử dụng tất cả dịch vụ."}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <Button onClick={handleGoHome} className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto">
+                    <Home className="mr-2 h-4 w-4" />
+                    Về trang chủ
+                  </Button>
+                </div>
               </CardContent>
             </Card>
+
+            {appeal && (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-4">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Clock className="h-5 w-5 text-slate-500" />
+                    Kháng cáo gần nhất
+                  </CardTitle>
+                  {statusBadge(appeal.status)}
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <p className="text-slate-700">{appeal.appealText}</p>
+                  {appeal.adminNote && (
+                    <div className="rounded-md bg-slate-100 p-3 text-slate-700">
+                      Ghi chú Admin: {appeal.adminNote}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
         </main>
         <Footer />
@@ -187,9 +231,9 @@ export default function AppealPage() {
       <Header />
       <main className="flex-1 bg-slate-50 px-4 py-10">
         <div className="mx-auto max-w-4xl space-y-6">
-          {/* Card trạng thái mở khóa thành công khi appeal được APPROVED */}
+          {/* Banner thông báo trạng thái tài khoản */}
           {isApproved ? (
-            <section className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-6">
+            <section className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-6">
               <div className="flex items-start gap-4">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-100">
                   <CheckCircle2 className="h-6 w-6 text-emerald-600" />
@@ -197,16 +241,23 @@ export default function AppealPage() {
                 <div className="space-y-3 flex-1">
                   <h1 className="text-xl font-semibold text-emerald-950">Kháng cáo của bạn đã được chấp nhận!</h1>
                   <p className="text-sm text-emerald-800">
-                    Admin đã phê duyệt đơn kháng cáo và mở khóa tài khoản của bạn. Vui lòng quay lại Trang chủ để tiếp tục sử dụng các dịch vụ đặt sân.
+                    Admin đã phê duyệt đơn kháng cáo và mở khóa tài khoản của bạn. Vui lòng bấm vào nút bên dưới để cập nhật phiên và tiếp tục sử dụng hệ thống.
                   </p>
-                  <Button onClick={() => router.push("/")} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                    Về trang chủ ngay
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-3 pt-1">
+                    <Button onClick={handleGoHome} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                      <Home className="mr-2 h-4 w-4" />
+                      Về trang chủ ngay
+                    </Button>
+                    <Button variant="outline" onClick={() => signOut({ callbackUrl: "/login" })}>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Đăng nhập lại
+                    </Button>
+                  </div>
                 </div>
               </div>
             </section>
           ) : (
-            <section className="rounded-lg border border-rose-200 bg-white p-6">
+            <section className="rounded-lg border border-rose-200 bg-white p-6 shadow-sm">
               <div className="flex items-start gap-4">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-rose-100">
                   <ShieldAlert className="h-6 w-6 text-rose-600" />

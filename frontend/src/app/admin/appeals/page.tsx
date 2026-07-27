@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type AppealStatus = "PENDING" | "APPROVED" | "REJECTED";
@@ -83,6 +84,8 @@ export default function AdminAppealsPage() {
     loadAppeals();
   }, [status]);
 
+  const queryClient = useQueryClient();
+
   const reviewAppeal = async (appealId: number, nextStatus: "APPROVED" | "REJECTED") => {
     setReviewingId(appealId);
     setError(null);
@@ -96,6 +99,8 @@ export default function AdminAppealsPage() {
       } else {
         toast.info("Đã từ chối đơn kháng cáo.");
       }
+      queryClient.invalidateQueries({ queryKey: ["admin-customers"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-owners"] });
       await loadAppeals();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không thể xử lý kháng cáo.");
