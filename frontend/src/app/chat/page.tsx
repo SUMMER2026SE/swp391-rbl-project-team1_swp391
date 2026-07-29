@@ -29,6 +29,16 @@ import {
 } from "@/lib/chat-api"
 import { getVenueDetail } from "@/lib/api/venue"
 import { useChatWebSocket, type TypingEvent, type BlockEvent } from "@/hooks/useChatWebSocket"
+import type { ChatContext } from "@/lib/contextual-chat"
+
+type ContextCardData = ChatContext & {
+  complexId?: number
+  complexName?: string
+  facilityId?: number
+  facilityName?: string
+  stadiumName?: string
+  nodeType?: 'COMPLEX' | 'FACILITY' | 'COURT' | string
+}
 
 function formatRelativeTime(dateStr: string | null | undefined): string {
   if (!dateStr) return ''
@@ -73,8 +83,8 @@ function ChatPage() {
   const currentUserName = session?.user?.name || 'Bạn'
   const queryClient = useQueryClient()
 
-  const handleContextCardClick = (context: any) => {
-    const isOwner = (session?.user as any)?.roleName === 'Owner'
+  const handleContextCardClick = (context: ContextCardData) => {
+    const isOwner = (session?.user as { roleName?: string })?.roleName === 'Owner'
 
     if (context.action === 'stadium_referral') {
       if (isOwner) {
@@ -115,23 +125,25 @@ function ChatPage() {
   const [recalledMessages, setRecalledMessages] = useState<Set<number>>(new Set())
   const [reactions, setReactions] = useState<Record<number, string>>({})
   const [venueCache, setVenueCache] = useState<Record<number, { complexId?: number; complexName?: string; facilityId?: number; facilityName?: string; stadiumName?: string; nodeType?: string }>>({})
+  const fetchedVenueIdsRef = useRef<Set<number>>(new Set())
 
   // Auto-fetch 3-level venue info for context cards missing complexName (e.g. legacy/old messages in DB)
   useEffect(() => {
     if (!messages || messages.length === 0) return
-    const missingIds = new Set<number>()
+    const missingIds: number[] = []
     messages.forEach(msg => {
       if (msg.messageType === 'SYSTEM') {
         try {
           const ctx = JSON.parse(msg.content)
           const sId = ctx.stadiumId || ctx.venueId
-          if (sId && !ctx.complexName && !venueCache[sId]) {
-            missingIds.add(sId)
+          if (sId && !ctx.complexName && !fetchedVenueIdsRef.current.has(sId)) {
+            fetchedVenueIdsRef.current.add(sId)
+            missingIds.push(sId)
           }
         } catch {}
       }
     })
-    if (missingIds.size > 0) {
+    if (missingIds.length > 0) {
       missingIds.forEach(id => {
         getVenueDetail(id)
           .then(v => {
@@ -149,7 +161,9 @@ function ChatPage() {
               }))
             }
           })
-          .catch(() => {})
+          .catch(() => {
+            fetchedVenueIdsRef.current.delete(id)
+          })
       })
     }
   }, [messages])
