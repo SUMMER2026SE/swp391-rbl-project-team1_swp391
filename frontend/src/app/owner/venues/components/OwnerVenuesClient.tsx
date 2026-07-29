@@ -94,6 +94,55 @@ export default function OwnerVenuesClient({
     setVenues(initialVenues);
   }, [initialComplexes, initialVenues]);
 
+  // Handle URL query parameters for auto-expanding 3 levels & scrolling to target venue node
+  useEffect(() => {
+    const complexIdParam = searchParams.get('complexId');
+    const facilityIdParam = searchParams.get('facilityId');
+    const stadiumIdParam = searchParams.get('stadiumId');
+
+    if (complexIdParam) {
+      setCollapsedComplexes(prev => ({ ...prev, [Number(complexIdParam)]: false }));
+    }
+    if (facilityIdParam) {
+      setCollapsedFacilities(prev => ({ ...prev, [Number(facilityIdParam)]: false }));
+    }
+    let targetId: string | null = null;
+    if (stadiumIdParam && venues.length > 0) {
+      const matchVenue = venues.find(v => v.stadiumId === Number(stadiumIdParam));
+      if (matchVenue) {
+        if (matchVenue.complexId) {
+          setCollapsedComplexes(prev => ({ ...prev, [matchVenue.complexId!]: false }));
+        }
+        if (matchVenue.parentStadiumId) {
+          setCollapsedFacilities(prev => ({ ...prev, [matchVenue.parentStadiumId!]: false }));
+        }
+        if (matchVenue.nodeType === 'FACILITY') {
+          targetId = `facility-${stadiumIdParam}`;
+        } else if (matchVenue.nodeType === 'COURT') {
+          targetId = `court-${stadiumIdParam}`;
+        }
+      }
+    }
+    if (!targetId && facilityIdParam) {
+      targetId = `facility-${facilityIdParam}`;
+    }
+    if (!targetId && complexIdParam) {
+      targetId = `complex-${complexIdParam}`;
+    }
+    if (targetId) {
+      setTimeout(() => {
+        const el = document.getElementById(targetId);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-2', 'ring-emerald-500', 'bg-emerald-50/50');
+          setTimeout(() => {
+            el.classList.remove('ring-2', 'ring-emerald-500', 'bg-emerald-50/50');
+          }, 3000);
+        }
+      }, 400);
+    }
+  }, [searchParams, venues]);
+
   // Modal states for old actions
   const [isAccessoryOpen, setIsAccessoryOpen] = useState(false);
   const [selectedVenueForAccessory, setSelectedVenueForAccessory] = useState<VenueModalData | null>(null);
@@ -312,7 +361,7 @@ export default function OwnerVenuesClient({
             const complexFacilities = venues.filter(v => v.nodeType === 'FACILITY' && v.complexId === complex.complexId);
 
             return (
-              <Card key={complex.complexId} className="border-slate-100 dark:border-border overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+              <Card key={complex.complexId} id={`complex-${complex.complexId}`} className="border-slate-100 dark:border-border overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
                 {/* L1: Complex Node Header */}
                 <div className="bg-slate-50/70 dark:bg-muted/40 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-border">
                   <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -415,7 +464,7 @@ export default function OwnerVenuesClient({
                           const facilityCourts = venues.filter(v => v.nodeType === 'COURT' && v.parentStadiumId === facility.stadiumId);
 
                           return (
-                            <div key={facility.stadiumId} className="bg-white dark:bg-card">
+                            <div key={facility.stadiumId} id={`facility-${facility.stadiumId}`} className="bg-white dark:bg-card transition-all duration-300">
                               {/* L2: Facility Node Header */}
                               <div className="p-4 pl-8 md:pl-12 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/20">
                                 <div className="flex items-start gap-3 min-w-0 flex-1">
@@ -549,7 +598,7 @@ export default function OwnerVenuesClient({
                                         </TableHeader>
                                         <TableBody>
                                           {facilityCourts.map(court => (
-                                            <TableRow key={court.stadiumId} className="hover:bg-slate-50/30 transition-colors">
+                                            <TableRow key={court.stadiumId} id={`court-${court.stadiumId}`} className="hover:bg-slate-50/30 transition-all duration-300">
                                               <TableCell className="font-semibold text-slate-800 dark:text-slate-200 truncate">
                                                 <div className="flex flex-col gap-1 items-start">
                                                   <span className="truncate">{court.stadiumName}</span>

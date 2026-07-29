@@ -155,6 +155,9 @@ export type BookingDetailItem = {
   cancelReason: string | null;
   ownerUserId?: number;
   stadiumId?: number;
+  complexId?: number | null;
+  facilityId?: number | null;
+  facilityName?: string | null;
   accessories?: {
     accessoryName: string;
     quantity: number;
@@ -169,7 +172,10 @@ export async function fetchBookingDetail(id: string | number): Promise<BookingDe
     id: String(data.bookingId),
     displayId: data.displayId,
     venueName: data.stadium?.stadiumName || "Sân chưa biết",
+    complexId: data.stadium?.complexId ?? null,
     complexName: data.stadium?.complexName ?? null,
+    facilityId: data.stadium?.facilityId ?? null,
+    facilityName: data.stadium?.facilityName ?? null,
     sportType: data.stadium?.sportType || "Khác",
     imageUrl: data.stadium?.imageUrl || "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?q=80&w=300&auto=format&fit=crop",
     playDate: data.reservationDate || "Chưa rõ",

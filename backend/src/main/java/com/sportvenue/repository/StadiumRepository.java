@@ -118,7 +118,7 @@ public interface StadiumRepository extends JpaRepository<Stadium, Integer>, JpaS
             """)
     long countByOwnerOwnerIdAndStadiumStatus(@Param("ownerId") Integer ownerId, @Param("status") StadiumStatus status);
 
-    @EntityGraph(attributePaths = {"sportType", "images", "owner", "owner.user", "amenities", "accessories", "timeSlots"})
+    @EntityGraph(attributePaths = {"complex", "parentStadium", "parentStadium.complex", "sportType", "images", "owner", "owner.user", "amenities", "accessories", "timeSlots"})
     Optional<Stadium> findWithDetailsByStadiumId(Integer stadiumId);
 
     @EntityGraph(attributePaths = {"sportType", "images"})

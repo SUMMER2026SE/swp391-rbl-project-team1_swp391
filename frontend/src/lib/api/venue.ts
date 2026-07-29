@@ -43,6 +43,11 @@ export interface VenueDetail {
   openTime: string
   closeTime: string
   stadiumStatus: string
+  complexId?: number
+  complexName?: string
+  parentStadiumId?: number
+  facilityName?: string
+  nodeType?: string
   amenities: Array<{
     amenityId: number
     name: string
