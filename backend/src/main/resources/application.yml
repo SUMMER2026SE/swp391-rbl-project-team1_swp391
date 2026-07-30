@@ -154,6 +154,8 @@ vnpay:
   ipn-url: ${VNPAY_IPN_URL:http://localhost:8080/api/v1/payments/vnpay-ipn}
   # FE URL mà BE redirect browser sang sau khi xử lý callback.
   frontend-return-url: ${VNPAY_FRONTEND_RETURN_URL:http://localhost:3000/payments/result}
+  # FE URL redirect sau khi nạp tiền vào ví thành công (khác trang kết quả booking).
+  frontend-wallet-return-url: ${VNPAY_FRONTEND_WALLET_RETURN_URL:http://localhost:3000/wallet}
   version: "2.1.0"
   command: pay
   currency-code: VND

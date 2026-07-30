@@ -130,7 +130,11 @@ services:
       VNPAY_URL: ${VNPAY_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
       VNPAY_RETURN_URL: ${VNPAY_RETURN_URL:-http://localhost:8080/api/v1/payments/vnpay-return}
       VNPAY_FRONTEND_RETURN_URL: ${VNPAY_FRONTEND_RETURN_URL:-http://localhost:3000/payments/result}
+      VNPAY_FRONTEND_WALLET_RETURN_URL: ${VNPAY_FRONTEND_WALLET_RETURN_URL:-http://localhost:3000/wallet}
+      VNPAY_IPN_URL: ${VNPAY_IPN_URL:-http://localhost:8080/api/v1/payments/vnpay-ipn}
       GROQ_API_KEY: ${GROQ_API_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-noreply@sportvenue.com}
+      AI_MODEL: ${AI_MODEL:-llama-3.3-70b-versatile}
     volumes:
       - ./backend/uploads:/app/uploads
     ports:

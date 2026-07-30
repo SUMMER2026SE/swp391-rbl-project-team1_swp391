@@ -36,7 +36,7 @@ public class SwaggerConfig {
                                 .url("https://github.com")))
                 .servers(List.of(
                         new Server().url("http://localhost:8080").description("Local Dev"),
-                        new Server().url("https://api.sportvenue.example.com").description("Production")
+                        new Server().url("https://sportsbookswp391vnapi.duckdns.org").description("Production")
                 ))
                 .addSecurityItem(new SecurityRequirement().addList(securitySchemeName))
                 .components(new Components()
