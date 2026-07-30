@@ -125,7 +125,12 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(
                 "http://localhost:3000",
-                "http://localhost:3001"
+                "http://localhost:3001",
+                // Production domains (DuckDNS)
+                "https://sportsbookswp391vn.duckdns.org",
+                "http://sportsbookswp391vn.duckdns.org",
+                // Fallback IP trực tiếp
+                "http://103.69.85.35:3000"
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
