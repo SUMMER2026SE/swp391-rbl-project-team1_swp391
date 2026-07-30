@@ -54,6 +54,11 @@ export interface VenueDetailProps {
   venue: {
     id: number
     name: string
+    complexId?: number
+    complexName?: string
+    facilityId?: number
+    facilityName?: string
+    nodeType?: 'COMPLEX' | 'FACILITY' | 'COURT'
     sport: string
     address: string
     rating: number
@@ -151,7 +156,14 @@ export default function VenueDetail({ venue }: VenueDetailProps) {
     try {
       setChatStarting(true)
       const conversationId = await createContextualConversation(venue.owner.userId, {
-        action: 'stadium_referral', stadiumId: venue.id, stadiumName: venue.name,
+        action: 'stadium_referral',
+        stadiumId: venue.id,
+        stadiumName: venue.name,
+        complexId: venue.complexId,
+        complexName: venue.complexName,
+        facilityId: venue.facilityId,
+        facilityName: venue.facilityName,
+        nodeType: venue.nodeType,
       })
       router.push(chatUrl(conversationId))
     } catch {

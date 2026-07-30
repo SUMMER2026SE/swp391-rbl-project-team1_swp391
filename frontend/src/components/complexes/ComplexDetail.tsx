@@ -105,7 +105,12 @@ export default function ComplexDetail({
     try {
       setChatStarting(true)
       const conversationId = await createContextualConversation(complex.ownerUserId, {
-        action: 'stadium_referral', stadiumId: complex.complexId, stadiumName: complex.name,
+        action: 'stadium_referral',
+        stadiumId: complex.complexId,
+        stadiumName: complex.name,
+        complexId: complex.complexId,
+        complexName: complex.name,
+        nodeType: 'COMPLEX',
       })
       router.push(chatUrl(conversationId))
     } catch {

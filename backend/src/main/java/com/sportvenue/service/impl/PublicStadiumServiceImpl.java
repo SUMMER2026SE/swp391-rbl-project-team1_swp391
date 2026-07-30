@@ -251,7 +251,11 @@ public class PublicStadiumServiceImpl implements PublicStadiumService {
                 .pricePerHour(stadium.getPricePerHour())
                 .stadiumStatus(stadium.getStadiumStatus() != null ? stadium.getStadiumStatus().name() : null)
                 .approvedStatus(approvedStatusVal != null ? approvedStatusVal.name() : null)
+                .complexId(StadiumUtils.resolveComplexId(stadium))
                 .complexName(StadiumUtils.resolveComplexName(stadium))
+                .parentStadiumId(StadiumUtils.resolveFacilityId(stadium))
+                .facilityName(StadiumUtils.resolveFacilityName(stadium))
+                .nodeType(stadium.getNodeType() != null ? stadium.getNodeType().name() : null)
                 .amenities(amenityResponses)
                 .build();
     }
@@ -342,6 +346,11 @@ public class PublicStadiumServiceImpl implements PublicStadiumService {
                 .stadiumStatus(stadium.getStadiumStatus() != null ? stadium.getStadiumStatus().name() : null)
                 .approvedStatus(approvedStatusVal != null ? approvedStatusVal.name() : null)
                 .footballFieldType(stadium.getFootballFieldType())
+                .nodeType(stadium.getNodeType() != null ? stadium.getNodeType().name() : null)
+                .complexId(com.sportvenue.util.StadiumUtils.resolveComplexId(stadium))
+                .complexName(com.sportvenue.util.StadiumUtils.resolveComplexName(stadium))
+                .parentStadiumId(com.sportvenue.util.StadiumUtils.resolveFacilityId(stadium))
+                .facilityName(com.sportvenue.util.StadiumUtils.resolveFacilityName(stadium))
                 .amenities(mapAmenities(stadium))
                 .accessories(mapAccessories(stadiumAccessories))
                 .timeSlots(mapTimeSlots(stadium))

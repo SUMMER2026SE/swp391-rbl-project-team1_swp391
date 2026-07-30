@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -253,6 +254,25 @@ function BookingManagementPage() {
     fetchBookings();
   }, [fetchBookings]);
 
+  const searchParams = useSearchParams();
+
+  // Auto-expand target booking row and scroll when coming from Context Card
+  useEffect(() => {
+    const bookingIdParam = searchParams.get('bookingId');
+    if (bookingIdParam && bookingList.length > 0) {
+      const bId = Number(bookingIdParam);
+      setExpandedRow(bId);
+      setTimeout(() => {
+        const el = document.getElementById(`booking-row-${bId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-2', 'ring-emerald-500');
+          setTimeout(() => el.classList.remove('ring-2', 'ring-emerald-500'), 3000);
+        }
+      }, 400);
+    }
+  }, [searchParams, bookingList]);
+
   const handleTabChange = (value: string) => {
     setActiveTab(value);
     setPage(0);
@@ -490,7 +510,7 @@ function BookingManagementPage() {
 
     return (
       <>
-        <tr className="border-b hover:bg-muted/40 transition-colors duration-150">
+        <tr id={`booking-row-${booking.id}`} className="border-b hover:bg-muted/40 transition-all duration-300">
           <td className="p-4 align-middle">
             <Checkbox />
           </td>

@@ -54,6 +54,7 @@ public class StadiumResponse {
     private Integer complexId;
     private String complexName;
     private Integer parentStadiumId;
+    private String facilityName;
     
     private List<AmenityResponse> amenities;
 }

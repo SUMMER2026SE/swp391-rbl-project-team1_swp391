@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
 import { useQueryClient } from "@tanstack/react-query"
 import { Header } from "@/components/layout/Header"
 import { Button } from "@/components/ui/button"
@@ -26,7 +27,18 @@ import {
   getUnreadCount, searchUsers, renameGroupChat, blockUser, unblockUser,
   leaveGroupChat, deleteConversation, type ConversationDto, type ChatMessageDto
 } from "@/lib/chat-api"
+import { getVenueDetail } from "@/lib/api/venue"
 import { useChatWebSocket, type TypingEvent, type BlockEvent } from "@/hooks/useChatWebSocket"
+import type { ChatContext } from "@/lib/contextual-chat"
+
+type ContextCardData = ChatContext & {
+  complexId?: number
+  complexName?: string
+  facilityId?: number
+  facilityName?: string
+  stadiumName?: string
+  nodeType?: 'COMPLEX' | 'FACILITY' | 'COURT' | string
+}
 
 function formatRelativeTime(dateStr: string | null | undefined): string {
   if (!dateStr) return ''
@@ -66,9 +78,45 @@ function formatMessagePreview(content: string | undefined | null): string {
 
 function ChatPage() {
   const { data: session } = useSession()
+  const router = useRouter()
   const currentUserId = (session?.user as { userId?: number })?.userId
   const currentUserName = session?.user?.name || 'Bạn'
   const queryClient = useQueryClient()
+
+  const handleContextCardClick = (context: ContextCardData) => {
+    const isOwner = (session?.user as { roleName?: string })?.roleName === 'Owner'
+
+    if (context.action === 'stadium_referral') {
+      if (isOwner) {
+        const query = new URLSearchParams()
+        const isComplexOnly = context.nodeType === 'COMPLEX' || (context.complexId && context.stadiumId === context.complexId)
+        if (isComplexOnly) {
+          if (context.complexId) query.set('complexId', String(context.complexId))
+        } else {
+          if (context.complexId) query.set('complexId', String(context.complexId))
+          if (context.facilityId) query.set('facilityId', String(context.facilityId))
+          if (context.stadiumId) query.set('stadiumId', String(context.stadiumId))
+        }
+        router.push(`/owner/venues?${query.toString()}`)
+      } else {
+        if (context.nodeType === 'COMPLEX' && context.complexId) {
+          router.push(`/complexes/${context.complexId}`)
+        } else if (context.stadiumId && context.nodeType !== 'COMPLEX') {
+          router.push(`/venues/${context.stadiumId}`)
+        } else if (context.complexId) {
+          router.push(`/complexes/${context.complexId}`)
+        }
+      }
+    } else if (context.action === 'booking_referral') {
+      if (isOwner) {
+        router.push(`/owner/bookings?bookingId=${context.bookingId}`)
+      } else {
+        router.push(`/booking/${context.bookingId}`)
+      }
+    } else if (context.action === 'match_referral' && context.matchId) {
+      router.push(`/community`)
+    }
+  }
 
   // ── State ──────────────────────────────────────────────────
   const [conversations, setConversations] = useState<ConversationDto[]>([])
@@ -76,6 +124,49 @@ function ChatPage() {
   const [messages, setMessages] = useState<ChatMessageDto[]>([])
   const [recalledMessages, setRecalledMessages] = useState<Set<number>>(new Set())
   const [reactions, setReactions] = useState<Record<number, string>>({})
+  const [venueCache, setVenueCache] = useState<Record<number, { complexId?: number; complexName?: string; facilityId?: number; facilityName?: string; stadiumName?: string; nodeType?: string }>>({})
+  const fetchedVenueIdsRef = useRef<Set<number>>(new Set())
+
+  // Auto-fetch 3-level venue info for context cards missing complexName (e.g. legacy/old messages in DB)
+  useEffect(() => {
+    if (!messages || messages.length === 0) return
+    const missingIds: number[] = []
+    messages.forEach(msg => {
+      if (msg.messageType === 'SYSTEM') {
+        try {
+          const ctx = JSON.parse(msg.content)
+          const sId = ctx.stadiumId || ctx.venueId
+          if (sId && !ctx.complexName && !fetchedVenueIdsRef.current.has(sId)) {
+            fetchedVenueIdsRef.current.add(sId)
+            missingIds.push(sId)
+          }
+        } catch {}
+      }
+    })
+    if (missingIds.length > 0) {
+      missingIds.forEach(id => {
+        getVenueDetail(id)
+          .then(v => {
+            if (v) {
+              setVenueCache(prev => ({
+                ...prev,
+                [id]: {
+                  complexId: v.complexId,
+                  complexName: v.complexName,
+                  facilityId: v.parentStadiumId,
+                  facilityName: v.facilityName,
+                  stadiumName: v.stadiumName,
+                  nodeType: v.nodeType
+                }
+              }))
+            }
+          })
+          .catch(() => {
+            fetchedVenueIdsRef.current.delete(id)
+          })
+      })
+    }
+  }, [messages])
   const [replyingTo, setReplyingTo] = useState<ChatMessageDto | null>(null)
   const [pinnedMessage, setPinnedMessage] = useState<{messageId: number, content: string} | null>(null)
   const [forwardingMessage, setForwardingMessage] = useState<ChatMessageDto | null>(null)
@@ -778,14 +869,132 @@ function ChatPage() {
                           let context: any = null
                           try { context = JSON.parse(mainContent) } catch {}
                           if (context?.action === 'stadium_referral' || context?.action === 'booking_referral' || context?.action === 'match_referral') {
-                            const title = context.stadiumName || context.title || 'Ngữ cảnh trao đổi'
+                            if (context.action === 'stadium_referral') {
+                              const cached = context.stadiumId ? venueCache[context.stadiumId] : null
+                              const complexName = context.complexName || cached?.complexName
+                              const facilityName = context.facilityName || cached?.facilityName
+                              const stadiumName = context.stadiumName || cached?.stadiumName || context.title || 'Sân thể thao'
+                              const complexId = context.complexId || cached?.complexId
+                              const facilityId = context.facilityId || cached?.facilityId
+                              const nodeType = context.nodeType || cached?.nodeType
+
+                              const fullContext = {
+                                ...context,
+                                complexId,
+                                complexName,
+                                facilityId,
+                                facilityName,
+                                stadiumName,
+                                nodeType
+                              }
+
+                              return (
+                                <div key={msg.messageId} className="flex justify-center my-3">
+                                  <div 
+                                    onClick={() => handleContextCardClick(fullContext)}
+                                    className="w-full max-w-sm rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 shadow-sm hover:shadow-md hover:border-emerald-500 cursor-pointer transition-all group"
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                                        Ngữ cảnh trao đổi • Sân
+                                      </p>
+                                      <span className="text-[10px] text-emerald-600 font-medium group-hover:underline flex items-center gap-0.5">
+                                        Xem chi tiết &rarr;
+                                      </span>
+                                    </div>
+
+                                    {complexName ? (
+                                      <>
+                                        <p className="mt-1 text-sm font-bold text-slate-900 leading-snug">
+                                          🏢 {complexName}
+                                        </p>
+                                        <p className="mt-0.5 text-xs text-slate-600 font-medium">
+                                          📍 {facilityName ? `${facilityName} › ` : ''}{stadiumName !== complexName ? stadiumName : 'Tổ hợp sân'}
+                                        </p>
+                                      </>
+                                    ) : facilityName ? (
+                                      <>
+                                        <p className="mt-1 text-sm font-bold text-slate-900 leading-snug">
+                                          🏟️ {facilityName}
+                                        </p>
+                                        <p className="mt-0.5 text-xs text-slate-600 font-medium">
+                                          📍 {stadiumName}
+                                        </p>
+                                      </>
+                                    ) : (
+                                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                                        🏟️ {stadiumName}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            }
+
+                            if (context.action === 'booking_referral') {
+                              const cached = context.stadiumId ? venueCache[context.stadiumId] : null
+                              const complexName = context.complexName || cached?.complexName
+                              const facilityName = context.facilityName || cached?.facilityName
+                              const stadiumName = context.stadiumName || cached?.stadiumName || 'Sân thể thao'
+                              const timeDetail = context.playDate
+                                ? `${context.playDate}${context.time ? ` · ${context.time}` : ''}`
+                                : null
+
+                              const fullContext = {
+                                ...context,
+                                complexId: context.complexId || cached?.complexId,
+                                complexName,
+                                facilityId: context.facilityId || cached?.facilityId,
+                                facilityName,
+                                stadiumName
+                              }
+
+                              return (
+                                <div key={msg.messageId} className="flex justify-center my-3">
+                                  <div 
+                                    onClick={() => handleContextCardClick(fullContext)}
+                                    className="w-full max-w-sm rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 shadow-sm hover:shadow-md hover:border-emerald-500 cursor-pointer transition-all group"
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                                        Ngữ cảnh trao đổi • Booking #{context.bookingId}
+                                      </p>
+                                      <span className="text-[10px] text-emerald-600 font-medium group-hover:underline flex items-center gap-0.5">
+                                        Xem chi tiết &rarr;
+                                      </span>
+                                    </div>
+
+                                    <p className="mt-1 text-sm font-bold text-slate-900 leading-snug">
+                                      🏢 {complexName || facilityName || 'Tổ hợp sân'}
+                                    </p>
+                                    <p className="mt-0.5 text-xs text-slate-600 font-medium">
+                                      📍 {facilityName && complexName ? `${facilityName} › ` : ''}{stadiumName}
+                                    </p>
+                                    {timeDetail && (
+                                      <div className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-emerald-100/70 px-2 py-0.5 text-[11px] font-medium text-emerald-800">
+                                        📅 {timeDetail}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )
+                            }
+
+                            const title = context.title || 'Kèo thi đấu'
                             const detail = context.playDate
                               ? `${context.playDate}${context.time ? ` · ${context.time}` : ''}`
-                              : context.sportName || 'Thông tin được chia sẻ từ hệ thống'
+                              : context.sportName || 'Thông tin từ hệ thống'
+
                             return (
                               <div key={msg.messageId} className="flex justify-center my-3">
-                                <div className="w-full max-w-sm rounded-xl border bg-emerald-50/70 p-3 shadow-sm">
-                                  <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Ngữ cảnh trao đổi</p>
+                                <div 
+                                  onClick={() => handleContextCardClick(context)}
+                                  className="w-full max-w-sm rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 shadow-sm hover:shadow-md hover:border-emerald-500 cursor-pointer transition-all group"
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Ngữ cảnh trao đổi • Kèo giao lưu</p>
+                                    <span className="text-[10px] text-emerald-600 font-medium group-hover:underline">Xem chi tiết &rarr;</span>
+                                  </div>
                                   <p className="mt-1 text-sm font-semibold text-slate-900">{title}</p>
                                   <p className="text-xs text-slate-600">{detail}</p>
                                 </div>

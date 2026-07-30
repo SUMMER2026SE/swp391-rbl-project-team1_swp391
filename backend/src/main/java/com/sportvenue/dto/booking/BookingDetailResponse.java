@@ -105,7 +105,10 @@ public class BookingDetailResponse {
         private Integer stadiumId;
         private Integer ownerUserId;
         private String stadiumName;
+        private Integer complexId;
         private String complexName;
+        private Integer facilityId;
+        private String facilityName;
         private String address;
         private String sportType;
         private String imageUrl;

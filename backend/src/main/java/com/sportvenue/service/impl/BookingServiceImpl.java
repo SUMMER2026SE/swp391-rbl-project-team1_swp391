@@ -1289,7 +1289,10 @@ public class BookingServiceImpl implements BookingService {
                         .ownerUserId(stadium.resolveOwner() != null && stadium.resolveOwner().getUser() != null
                                 ? stadium.resolveOwner().getUser().getUserId() : null)
                         .stadiumName(stadium.getStadiumName())
+                        .complexId(StadiumUtils.resolveComplexId(stadium))
                         .complexName(StadiumUtils.resolveComplexName(stadium))
+                        .facilityId(StadiumUtils.resolveFacilityId(stadium))
+                        .facilityName(StadiumUtils.resolveFacilityName(stadium))
                         .address(StadiumUtils.resolveAddress(stadium))
                         .sportType(sportType)
                         .imageUrl(imageUrl)

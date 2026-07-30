@@ -40,6 +40,11 @@ export default async function VenueDetailPage({ params }: PageProps) {
   const mappedVenue = {
     id: venue.stadiumId,
     name: venue.stadiumName,
+    complexId: venue.complexId,
+    complexName: venue.complexName,
+    facilityId: venue.parentStadiumId,
+    facilityName: venue.facilityName,
+    nodeType: venue.nodeType as any,
     sport: venue.sportName,
     address: venue.address,
     rating: venue.averageRating || 0,

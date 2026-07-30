@@ -38,6 +38,13 @@ public class StadiumDetailResponse {
     private String approvedStatus;
     private FootballFieldType footballFieldType;
     
+    // Hierarchy fields
+    private String nodeType;
+    private Integer complexId;
+    private String complexName;
+    private Integer parentStadiumId;
+    private String facilityName;
+    
     private List<AmenityResponse> amenities;
     private List<AccessoryResponse> accessories;
     private List<TimeSlotResponse> timeSlots;

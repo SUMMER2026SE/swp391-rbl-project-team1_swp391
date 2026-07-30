@@ -52,6 +52,37 @@ public class StadiumUtils {
         return null;
     }
 
+    /** Resolve the ID of the Complex a Facility/Court belongs to. */
+    public static Integer resolveComplexId(Stadium stadium) {
+        if (stadium == null) {
+            return null;
+        }
+        if (stadium.getComplex() != null) {
+            return stadium.getComplex().getComplexId();
+        }
+        if (stadium.getParentStadium() != null
+                && stadium.getParentStadium().getComplex() != null) {
+            return stadium.getParentStadium().getComplex().getComplexId();
+        }
+        return null;
+    }
+
+    /** Resolve the name of the parent Facility for a COURT node. */
+    public static String resolveFacilityName(Stadium stadium) {
+        if (stadium == null || stadium.getParentStadium() == null) {
+            return null;
+        }
+        return stadium.getParentStadium().getStadiumName();
+    }
+
+    /** Resolve the ID of the parent Facility for a COURT node. */
+    public static Integer resolveFacilityId(Stadium stadium) {
+        if (stadium == null || stadium.getParentStadium() == null) {
+            return null;
+        }
+        return stadium.getParentStadium().getStadiumId();
+    }
+
     public static String toSportLabel(String sportName) {
         return switch (sportName) {
             case "Football" -> "Bóng đá";

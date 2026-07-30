@@ -115,8 +115,16 @@ export default function BookingDetailPage() {
     try {
       setChatStarting(true);
       const conversationId = await createContextualConversation(booking.ownerUserId, {
-        action: 'booking_referral', bookingId: Number(booking.id), stadiumName: booking.venueName,
-        playDate: booking.playDate, time: `${booking.startTime} - ${booking.endTime}`,
+        action: 'booking_referral',
+        bookingId: Number(booking.id),
+        stadiumId: booking.stadiumId,
+        stadiumName: booking.venueName,
+        complexId: booking.complexId ?? undefined,
+        complexName: booking.complexName ?? undefined,
+        facilityId: booking.facilityId ?? undefined,
+        facilityName: booking.facilityName ?? undefined,
+        playDate: booking.playDate,
+        time: `${booking.startTime} - ${booking.endTime}`,
       });
       router.push(chatUrl(conversationId));
     } catch { toast.error('Không thể bắt đầu cuộc trò chuyện'); }

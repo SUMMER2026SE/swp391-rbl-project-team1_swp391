@@ -69,7 +69,10 @@ public class BookingResponse {
     public static class StadiumInfo {
         private Integer stadiumId;
         private String stadiumName;
+        private Integer complexId;
         private String complexName;
+        private Integer facilityId;
+        private String facilityName;
         private String address;
         private String sportType;
     }

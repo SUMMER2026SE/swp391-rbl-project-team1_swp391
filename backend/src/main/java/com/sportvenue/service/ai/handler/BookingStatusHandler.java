@@ -79,7 +79,10 @@ public class BookingStatusHandler {
             stadiumInfo = BookingResponse.StadiumInfo.builder()
                     .stadiumId(stadium.getStadiumId())
                     .stadiumName(stadium.getStadiumName())
+                    .complexId(StadiumUtils.resolveComplexId(stadium))
                     .complexName(StadiumUtils.resolveComplexName(stadium))
+                    .facilityId(StadiumUtils.resolveFacilityId(stadium))
+                    .facilityName(StadiumUtils.resolveFacilityName(stadium))
                     .address(stadium.getAddress())
                     .sportType(stadium.getSportType() != null ? stadium.getSportType().getSportName() : null)
                     .build();
