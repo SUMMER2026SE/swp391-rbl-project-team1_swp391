@@ -608,4 +608,51 @@ public class MatchRequestServiceImpl implements MatchRequestService {
                     .build();
         }).collect(Collectors.toList());
     }
+
+    @Override
+    @Transactional
+    public void cancelMatchByBookingCancellation(Integer bookingId) {
+        // Tìm kèo đang active (OPEN/FULL) gắn với booking này
+        Optional<MatchRequest> matchOpt = matchRequestRepository.findActiveByBookingId(bookingId);
+        if (matchOpt.isEmpty()) {
+            log.debug("No active match found for booking #{} — skip match auto-cancel.", bookingId);
+            return;
+        }
+
+        MatchRequest match = matchOpt.get();
+        Integer matchId = match.getMatchId();
+        String reason = "Chủ kèo đã hủy đặt sân, kèo đấu bị hủy tự động.";
+
+        log.info("[AUTO-CANCEL] Booking #{} cancelled → auto-cancelling Match #{} (status={})",
+                bookingId, matchId, match.getMatchStatus());
+
+        // 1. Cập nhật trạng thái kèo sang CANCELLED
+        matchRequestRepository.updateStatusAndReason(matchId, MatchStatus.CANCELLED, reason);
+
+        // 2. Bulk update các JoinRequest liên quan sang CANCELLED
+        int affectedRows = joinRequestRepository.bulkUpdateStatus(
+                matchId,
+                JoinRequestStatus.CANCELLED,
+                Arrays.asList(JoinRequestStatus.PENDING, JoinRequestStatus.APPROVED)
+        );
+
+        // 3. Reload match để có cancelReason mới nhất cho notification
+        match.setCancelReason(reason);
+
+        // 4. Gửi thông báo đến tất cả người tham gia (APPROVED/PENDING) — KHÔNG gửi cho host
+        try {
+            List<JoinRequest> joinRequests = joinRequestRepository.findAllByMatchRequestMatchId(matchId);
+            for (JoinRequest jr : joinRequests) {
+                if (jr.getRequestStatus() == JoinRequestStatus.APPROVED
+                        || jr.getRequestStatus() == JoinRequestStatus.PENDING) {
+                    customerNotificationService.notifyMatchCancelled(jr.getUser().getUserId(), match);
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("[AUTO-CANCEL] Failed to send match cancelled notifications for match #{}", matchId, ex);
+        }
+
+        log.info("[AUTO-CANCEL] Match #{} auto-cancelled due to booking #{} cancellation. Affected {} join requests.",
+                matchId, bookingId, affectedRows);
+    }
 }

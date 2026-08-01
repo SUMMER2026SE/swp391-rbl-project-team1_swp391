@@ -46,6 +46,7 @@ import com.sportvenue.service.BookingService;
 import com.sportvenue.service.MaintenanceScheduleService;
 import com.sportvenue.service.CustomerNotificationService;
 import com.sportvenue.service.EmailService;
+import com.sportvenue.service.MatchRequestService;
 import com.sportvenue.service.NotificationService;
 import com.sportvenue.util.AfterCommitExecutor;
 import com.sportvenue.util.StadiumUtils;
@@ -127,6 +128,7 @@ public class BookingServiceImpl implements BookingService {
     private final AfterCommitExecutor afterCommitExecutor;
     private final AdminDashboardService adminDashboardService;
     private final WalletService walletService;
+    private final MatchRequestService matchRequestService;
 
     @Override
     @Transactional
@@ -712,7 +714,16 @@ public class BookingServiceImpl implements BookingService {
             processGatewayRefundTx(ctx, bookingId, reason, currentUserId);
         }
 
-        // 3. Fetch lại Booking mới nhất để build response
+        // 3. Tự động hủy kèo đấu đang active gắn với booking này (nếu có)
+        //    — thực hiện sau khi booking đã được commit, ngoài transaction chính
+        //      để tránh rollback notification khi có lỗi phụ.
+        try {
+            matchRequestService.cancelMatchByBookingCancellation(bookingId);
+        } catch (Exception ex) {
+            log.warn("[AUTO-CANCEL] Failed to auto-cancel match for booking #{}: {}", bookingId, ex.getMessage());
+        }
+
+        // 4. Fetch lại Booking mới nhất để build response
         Booking finalBooking = transactionTemplate.execute(status -> 
                 bookingRepository.findDetailById(bookingId).orElse(ctx.booking));
         return toBookingDetailResponse(finalBooking, finalBooking.getStadium(), finalBooking.getSlot());
