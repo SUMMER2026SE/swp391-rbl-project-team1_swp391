@@ -7,6 +7,7 @@ import com.sportvenue.repository.AiUsageLogRepository;
 import com.sportvenue.service.ai.handler.BookingHandler;
 import com.sportvenue.service.ai.handler.BookingStatusHandler;
 import com.sportvenue.service.ai.handler.CancelBookingHandler;
+import com.sportvenue.service.ai.handler.CreateMatchHandler;
 import com.sportvenue.service.ai.handler.GetPriceHandler;
 import com.sportvenue.service.ai.handler.JoinMatchHandler;
 import com.sportvenue.service.ai.handler.MatchRequestHandler;
@@ -47,6 +48,8 @@ class AiChatServiceImplLogTest {
     @Mock
     private JoinMatchHandler joinMatchHandler;
     @Mock
+    private CreateMatchHandler createMatchHandler;
+    @Mock
     private MyBookingsHandler myBookingsHandler;
     @Mock
     private BookingStatusHandler bookingStatusHandler;
@@ -76,7 +79,7 @@ class AiChatServiceImplLogTest {
         });
 
         service = new AiChatServiceImpl(groqClient, stadiumSearchHandler, slotAvailabilityHandler,
-                matchRequestHandler, policyHandler, bookingHandler, joinMatchHandler, myBookingsHandler,
+                matchRequestHandler, policyHandler, bookingHandler, joinMatchHandler, createMatchHandler, myBookingsHandler,
                 bookingStatusHandler, cancelBookingHandler, getPriceHandler, recommendTimeHandler,
                 aiUsageLogRepository, paramNormalizer, intentValidator, conversationContextService);
     }

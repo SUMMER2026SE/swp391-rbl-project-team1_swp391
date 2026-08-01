@@ -21,6 +21,7 @@ import com.sportvenue.service.PublicStadiumService;
 import com.sportvenue.service.ai.handler.BookingHandler;
 import com.sportvenue.service.ai.handler.BookingStatusHandler;
 import com.sportvenue.service.ai.handler.CancelBookingHandler;
+import com.sportvenue.service.ai.handler.CreateMatchHandler;
 import com.sportvenue.service.ai.handler.GetPriceHandler;
 import com.sportvenue.service.ai.handler.JoinMatchHandler;
 import com.sportvenue.service.ai.handler.MatchRequestHandler;
@@ -134,9 +135,10 @@ class AiChatE2ETest {
         MatchRequestHandler matchRequestHandler = mock(MatchRequestHandler.class);
         PolicyHandler policyHandler = mock(PolicyHandler.class);
         JoinMatchHandler joinMatchHandler = mock(JoinMatchHandler.class);
+        CreateMatchHandler createMatchHandler = mock(CreateMatchHandler.class);
 
         aiChatService = new AiChatServiceImpl(groqClient, stadiumSearchHandler, slotAvailabilityHandler,
-                matchRequestHandler, policyHandler, bookingHandler, joinMatchHandler, myBookingsHandler,
+                matchRequestHandler, policyHandler, bookingHandler, joinMatchHandler, createMatchHandler, myBookingsHandler,
                 bookingStatusHandler, cancelBookingHandler, getPriceHandler, recommendTimeHandler,
                 aiUsageLogRepository, paramNormalizer, intentValidator, conversationContextService);
         aiChatService.setClock(fixedClock);

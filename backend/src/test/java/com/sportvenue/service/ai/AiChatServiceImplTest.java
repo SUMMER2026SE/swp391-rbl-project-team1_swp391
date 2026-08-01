@@ -5,6 +5,7 @@ import com.sportvenue.dto.response.AiChatTurnResponse;
 import com.sportvenue.service.ai.handler.BookingHandler;
 import com.sportvenue.service.ai.handler.BookingStatusHandler;
 import com.sportvenue.service.ai.handler.CancelBookingHandler;
+import com.sportvenue.service.ai.handler.CreateMatchHandler;
 import com.sportvenue.service.ai.handler.GetPriceHandler;
 import com.sportvenue.service.ai.handler.JoinMatchHandler;
 import com.sportvenue.service.ai.handler.MatchRequestHandler;
@@ -23,9 +24,11 @@ import org.mockito.quality.Strictness;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import com.fasterxml.jackson.databind.JsonNode;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,6 +55,8 @@ class AiChatServiceImplTest {
     private BookingHandler bookingHandler;
     @Mock
     private JoinMatchHandler joinMatchHandler;
+    @Mock
+    private CreateMatchHandler createMatchHandler;
     @Mock
     private MyBookingsHandler myBookingsHandler;
     @Mock
@@ -82,7 +87,7 @@ class AiChatServiceImplTest {
         });
 
         service = new AiChatServiceImpl(groqClient, stadiumSearchHandler, slotAvailabilityHandler,
-                matchRequestHandler, policyHandler, bookingHandler, joinMatchHandler, myBookingsHandler,
+                matchRequestHandler, policyHandler, bookingHandler, joinMatchHandler, createMatchHandler, myBookingsHandler,
                 bookingStatusHandler, cancelBookingHandler, getPriceHandler, recommendTimeHandler,
                 aiUsageLogRepository, paramNormalizer, intentValidator, conversationContextService);
     }
@@ -154,5 +159,71 @@ class AiChatServiceImplTest {
 
         assertThat(response).isSameAs(expected);
         verify(policyHandler).handle(any(), any());
+    }
+
+    @Test
+    void createMatchPhrase_overridesOldFindIntent_andDispatchesToCreateHandler() {
+        when(groqClient.chatJson(any(), any(), any(), any()))
+                .thenReturn(new GroqClient.GroqResult(
+                        "{\"intent\":\"find_match\",\"confidence\":0.92,\"message\":\"Ok\","
+                                + "\"params\":{\"sportName\":\"Bóng đá\",\"date\":\"2026-08-02\","
+                                + "\"startTime\":\"14:00\"}}",
+                        0, 0, 0));
+        AiChatTurnResponse expected = AiChatTurnResponse.builder().intent("create_match").build();
+        when(createMatchHandler.handle(any(), any(), any(), any(), any())).thenReturn(expected);
+        com.sportvenue.security.UserPrincipal principal = mock(com.sportvenue.security.UserPrincipal.class);
+        when(principal.getUserId()).thenReturn(7);
+
+        AiChatTurnResponse response = service.handleChat(
+                request("bây giờ tạo cho tôi kèo về sân bóng đá lúc 14h00 ngày mai đi"),
+                principal,
+                "u:7");
+
+        assertThat(response).isSameAs(expected);
+        verify(createMatchHandler).handle(any(), any(), nullable(Integer.class), any(), any());
+        verify(matchRequestHandler, never()).handle(any(), any(), any(), any());
+    }
+
+    @Test
+    void createMatchInformationQuestion_doesNotTriggerAutomaticCreation() {
+        when(groqClient.chatJson(any(), any(), any(), any()))
+                .thenReturn(new GroqClient.GroqResult(
+                        "{\"intent\":\"get_policy\",\"confidence\":0.95,\"message\":\"Đây là thông tin bạn cần\","
+                                + "\"params\":{\"topic\":\"matchmaking\"}}",
+                        0, 0, 0));
+        AiChatTurnResponse expected = AiChatTurnResponse.builder().intent("get_policy").build();
+        when(policyHandler.handle(any(), any())).thenReturn(expected);
+        com.sportvenue.security.UserPrincipal principal = mock(com.sportvenue.security.UserPrincipal.class);
+        when(principal.getUserId()).thenReturn(7);
+
+        AiChatTurnResponse response = service.handleChat(
+                request("Tạo kèo có mất phí không?"), principal, "u:7");
+
+        assertThat(response).isSameAs(expected);
+        verify(createMatchHandler, never()).handle(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void pendingCreateMatchDraft_forcesFollowUpBackToCreateHandler() {
+        when(groqClient.chatJson(any(), any(), any(), any()))
+                .thenReturn(new GroqClient.GroqResult(
+                        "{\"intent\":\"need_more_info\",\"confidence\":0.91,\"message\":\"Đã ghi nhận\","
+                                + "\"params\":{\"matchingType\":\"INDIVIDUAL\",\"maxPlayers\":4}}",
+                        0, 0, 0));
+        AiConversationContextService.PendingAction pending =
+                new AiConversationContextService.PendingAction(
+                        "create_match", new java.util.HashMap<>(), "title,matchingType");
+        when(conversationContextService.getPendingAction("u:7"))
+                .thenReturn(java.util.Optional.of(pending));
+        AiChatTurnResponse expected = AiChatTurnResponse.builder().intent("create_match").build();
+        when(createMatchHandler.handle(any(), any(), any(), any(), any())).thenReturn(expected);
+        com.sportvenue.security.UserPrincipal principal = mock(com.sportvenue.security.UserPrincipal.class);
+        when(principal.getUserId()).thenReturn(7);
+
+        AiChatTurnResponse response = service.handleChat(
+                request("ghép lẻ tối đa 4 người"), principal, "u:7");
+
+        assertThat(response).isSameAs(expected);
+        verify(createMatchHandler).handle(any(), any(), nullable(Integer.class), any(), eq("u:7"));
     }
 }
