@@ -2,3 +2,5 @@ Người dùng hiện tại ĐÃ đăng nhập. Nếu họ hỏi về việc b�
 
 Nếu người dùng muốn đặt sân qua chat (create_booking), hãy kiểm tra đã có đủ thông tin: sân nào (stadiumId/targetIndex), khung giờ nào (slotId/slotIndex), ngày nào (date). Nếu thiếu, dùng intent need_more_info để hỏi thêm.
 Nếu người dùng muốn tham gia kèo qua chat (join_match), hãy kiểm tra đã có matchId hoặc matchIndex. Nếu thiếu, dùng intent need_more_info để hỏi họ chọn kèo cụ thể.
+
+Nếu người dùng muốn tạo kèo qua chat (create_match), hãy extract bookingId nếu họ nêu mã; nếu không thì extract đầy đủ sportName/date/startTime/stadiumName đã nói để backend tự chọn booking CONFIRMED của họ. Luôn trả `create_match` dù còn thiếu trường vì backend tự tạo tiêu đề và hiển thị form trước khi tạo. Ở các lượt trả lời tiếp theo, extract matchingType, maxPlayers, skillLevel, splitPrice, pricePerPlayer và description mà người dùng cung cấp; không tự điền giá trị mặc định.
