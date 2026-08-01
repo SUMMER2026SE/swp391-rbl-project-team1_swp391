@@ -13,6 +13,7 @@ import com.sportvenue.service.ai.handler.StadiumSearchHandler;
 import com.sportvenue.service.ai.handler.MyBookingsHandler;
 import com.sportvenue.service.ai.handler.BookingStatusHandler;
 import com.sportvenue.service.ai.handler.CancelBookingHandler;
+import com.sportvenue.service.ai.handler.CreateMatchHandler;
 import com.sportvenue.service.ai.handler.GetPriceHandler;
 import com.sportvenue.service.ai.handler.RecommendTimeHandler;
 import com.sportvenue.entity.AiUsageLog;
@@ -50,6 +51,7 @@ public class AiChatServiceImpl implements AiChatService {
     private final PolicyHandler policyHandler;
     private final BookingHandler bookingHandler;
     private final JoinMatchHandler joinMatchHandler;
+    private final CreateMatchHandler createMatchHandler;
     private final MyBookingsHandler myBookingsHandler;
     private final BookingStatusHandler bookingStatusHandler;
     private final CancelBookingHandler cancelBookingHandler;
@@ -134,6 +136,12 @@ public class AiChatServiceImpl implements AiChatService {
             log.info("GUEST FIX: Overriding create_booking to search_stadiums for guest user");
             parseResult.intentResult().setIntent("search_stadiums");
             parseResult.intentResult().setMessage("Bạn cần đăng nhập để đặt sân. Trước tiên, để mình tìm các sân phù hợp cho bạn nhé.");
+        }
+        if (isGuest && "create_match".equals(parseResult.intentResult().getIntent())) {
+            log.info("GUEST FIX: Blocking create_match for guest user");
+            parseResult.intentResult().setIntent("need_more_info");
+            parseResult.intentResult().setMessage(
+                    "Bạn cần đăng nhập để tạo kèo từ lịch đặt sân đã được xác nhận của mình nhé.");
         }
 
         long handlerStartTime = System.currentTimeMillis();
@@ -309,9 +317,18 @@ public class AiChatServiceImpl implements AiChatService {
 
             // Normalize params
             intentResult = paramNormalizer.normalize(intentResult);
-            
+
+            // Yêu cầu tạo kèo là một action rõ ràng. Ép intent trước khi kiểm tra confidence để
+            // model cũ/chưa cập nhật prompt không làm câu "tạo kèo" rơi vào fallback CSKH.
+            if (isCreateMatchRequest(userMessage) && !"create_match".equals(intentResult.getIntent())) {
+                log.info("Rule-based check: Overriding intent '{}' to create_match", intentResult.getIntent());
+                intentResult.setIntent("create_match");
+                ruleOverride = true;
+                validationStatus = "RULE_OVERRIDE";
+            }
+
             // Confidence check
-            if (intentResult.getConfidence() < 0.5) {
+            if (!ruleOverride && intentResult.getConfidence() < 0.5) {
                 log.info("Low confidence ({} < 0.5), overriding to need_more_info", intentResult.getConfidence());
                 intentResult.setIntent("need_more_info");
                 intentResult.setMessage("Mình chưa rõ ý bạn lắm, bạn có thể nói cụ thể hơn được không?");
@@ -387,6 +404,14 @@ public class AiChatServiceImpl implements AiChatService {
             return cancelBookingHandler.handle(result.getParams(), rawUserMessage, userId, conversationKey);
         }
 
+        // Khi đang thu thập thông tin tạo kèo, mọi câu trả lời tiếp theo phải quay lại đúng
+        // handler để merge vào draft, kể cả LLM chỉ trả need_more_info hoặc hiểu nhầm intent.
+        if (hasPendingCreateMatchDraft(conversationKey)) {
+            log.info("FORCE ROUTE to create_match handler: pending draft exists (LLM intent was '{}')", intent);
+            return createMatchHandler.handle(
+                    result.getParams(), message, userId, rawUserMessage, conversationKey);
+        }
+
         // DEFENSIVE FIX: Nếu LLM trả về need_more_info/nhầm intent MÀ message là confirm keyword,
         // thử lấy pending booking từ lastShownBookings (Redis có thể chưa kịp persist).
         // Trường hợp: "Có" nhưng isAwaitingCancelConfirmation=false do Redis race condition — ở đây
@@ -407,6 +432,8 @@ public class AiChatServiceImpl implements AiChatService {
             case "search_stadiums" -> stadiumSearchHandler.handle(result.getParams(), message, conversationKey, userLat, userLng);
             case "get_slots" -> slotAvailabilityHandler.handle(result.getParams(), message, conversationKey);
             case "find_match" -> matchRequestHandler.handle(result.getParams(), message, conversationKey, userId);
+            case "create_match" -> createMatchHandler.handle(
+                    result.getParams(), message, userId, rawUserMessage, conversationKey);
             case "get_policy" -> policyHandler.handle(result.getParams(), message);
             case "create_booking" -> bookingHandler.handleWithRawMessage(result.getParams(), message, conversationKey, userId, rawUserMessage);
             case "join_match" -> joinMatchHandler.handle(result.getParams(), message, conversationKey, userId);
@@ -453,6 +480,15 @@ public class AiChatServiceImpl implements AiChatService {
         // Nếu có lastShownBookings → có state
         List<Integer> lastBookings = conversationContextService.getLastShownBookingIds(conversationKey);
         return lastBookings != null && !lastBookings.isEmpty();
+    }
+
+    private boolean hasPendingCreateMatchDraft(String conversationKey) {
+        Optional<AiConversationContextService.PendingAction> pending =
+                conversationContextService.getPendingAction(conversationKey);
+        return pending != null && pending
+                .map(AiConversationContextService.PendingAction::getIntent)
+                .filter("create_match"::equals)
+                .isPresent();
     }
 
     private boolean applyRuleBasedOverrides(ExtractedIntentResult intentResult, String message) {
@@ -511,6 +547,31 @@ public class AiChatServiceImpl implements AiChatService {
             }
         }
         return overridden;
+    }
+
+    private boolean isCreateMatchRequest(String message) {
+        if (message == null || message.isBlank()) {
+            return false;
+        }
+        String normalized = message.toLowerCase(Locale.ROOT);
+        if (normalized.contains("không tạo") || normalized.contains("đừng tạo")
+                || normalized.contains("chưa tạo") || normalized.contains("khỏi tạo")
+                || normalized.contains("làm sao") || normalized.contains("cách tạo")
+                || normalized.contains("hướng dẫn") || normalized.contains("thế nào")
+                || normalized.contains("có mất") || normalized.contains("có cần")
+                || normalized.contains("bao nhiêu")) {
+            return false;
+        }
+        int createIndex = normalized.indexOf("tạo");
+        int matchIndex = normalized.indexOf("kèo");
+        boolean createBeforeMatch = createIndex >= 0 && matchIndex > createIndex
+                && matchIndex - createIndex <= 40;
+        return createBeforeMatch
+                || normalized.contains("tạo kèo")
+                || normalized.contains("lên kèo")
+                || normalized.contains("mở kèo")
+                || normalized.contains("đăng kèo")
+                || normalized.contains("tạo trận ghép");
     }
 
     private List<GroqClient.ChatMessage> toGroqHistory(List<AiChatTurnRequest.ChatMessage> history) {

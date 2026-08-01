@@ -46,6 +46,9 @@ public class AiChatTurnResponse {
     /** Thông tin kèo ghép nháp (intent: confirm_join_match) */
     private DraftJoinMatchResponse draftJoinMatch;
 
+    /** Form cấu hình kèo trước khi tạo (intent: create_match). */
+    private DraftCreateMatchResponse draftCreateMatch;
+
     public static AiChatTurnResponse messageOnly(String message, String intent) {
         return AiChatTurnResponse.builder().message(message).intent(intent).build();
     }

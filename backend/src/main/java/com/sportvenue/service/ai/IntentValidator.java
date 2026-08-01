@@ -23,7 +23,7 @@ public class IntentValidator {
     }
 
     private static final List<String> VALID_INTENTS = Arrays.asList(
-            "search_stadiums", "get_slots", "find_match", "create_booking", "join_match",
+            "search_stadiums", "get_slots", "find_match", "create_match", "create_booking", "join_match",
             "get_policy", "need_more_info", "out_of_scope", "unknown",
             "my_bookings", "booking_status", "cancel_booking", "get_price", "recommend_time"
     );

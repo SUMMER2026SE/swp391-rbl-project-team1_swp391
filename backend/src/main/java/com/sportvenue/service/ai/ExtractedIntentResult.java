@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
  * (field bị thiếu/sai kiểu vẫn có thể xảy ra) — nên field ở đây có default rõ ràng, không được để
  * null lan xuống tầng dispatch (xem docs/ai_chatbot_rebuild_plan.md mục 6.1).
  *
- * {@code intent} hợp lệ: "search_stadiums" | "get_slots" | "find_match" | "get_policy" |
+ * {@code intent} hợp lệ: "search_stadiums" | "get_slots" | "find_match" | "create_match" | "get_policy" |
  * "need_more_info" | "out_of_scope" | "unknown" (fallback khi parse lỗi hoàn toàn).
  */
 @Data
