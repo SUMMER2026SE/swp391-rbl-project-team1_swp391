@@ -127,4 +127,15 @@ public interface MatchRequestService {
      * @return danh sách MatchEligibleBookingResponse
      */
     List<com.sportvenue.dto.response.MatchEligibleBookingResponse> getEligibleBookingsForMatchCreation(Integer userId);
+
+    /**
+     * Tự động hủy kèo đang active gắn với booking khi booking đó bị hủy.
+     * Khác với {@link #cancelMatch} — không cần kiểm tra quyền sở hữu vì
+     * đây là hành động hệ thống triggered bởi luồng hủy booking.
+     * Gửi thông báo "Chủ kèo đã hủy đặt sân" tới tất cả người đã tham gia.
+     *
+     * @param bookingId ID của booking vừa bị hủy
+     */
+    void cancelMatchByBookingCancellation(Integer bookingId);
 }
+

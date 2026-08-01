@@ -77,4 +77,17 @@ public interface MatchRequestRepository extends JpaRepository<MatchRequest, Inte
     boolean existsBySportTypeSportTypeId(Integer sportTypeId);
 
     boolean existsByBookingBookingIdAndMatchStatusIn(Integer bookingId, List<MatchStatus> statuses);
+
+    /** Tìm kèo đang active (OPEN/FULL) gắn với một booking — dùng khi hủy booking để auto-cancel kèo. */
+    @EntityGraph(attributePaths = {"user", "stadium", "sportType"})
+    @Query("""
+            SELECT m FROM MatchRequest m
+            WHERE m.booking.bookingId = :bookingId
+            AND m.matchStatus IN (
+                com.sportvenue.entity.enums.MatchStatus.OPEN,
+                com.sportvenue.entity.enums.MatchStatus.FULL
+            )
+            """)
+    Optional<MatchRequest> findActiveByBookingId(@Param("bookingId") Integer bookingId);
 }
+
