@@ -7,7 +7,7 @@ PR này tổng hợp toàn bộ các cải tiến và bug fix sau vòng code rev
 ---
 
 ## Phạm vi thay đổi
-
+    
 | Khu vực | Files thay đổi |
 |---|---|
 | Backend — Config | `CacheConfig`, `SecurityConfig` |

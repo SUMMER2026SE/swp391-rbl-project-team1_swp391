@@ -17,7 +17,9 @@ DELETE FROM reports;
 DELETE FROM reviews;
 DELETE FROM venue_reviews;
 
--- 2) Xóa bookings
+-- 2) Xóa bookings và match_requests
+DELETE FROM join_requests;
+DELETE FROM match_requests;
 DELETE FROM bookings;
 
 -- 3) Xóa court (con) rồi facility (cha) thuộc complex OSM
