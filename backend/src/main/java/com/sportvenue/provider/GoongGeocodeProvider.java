@@ -34,30 +34,37 @@ public class GoongGeocodeProvider implements GeocodeProvider {
     public List<LocationDTO> search(String query) {
         try {
             String url = "https://rsapi.goong.io/geocode?address={address}&api_key={api_key}";
-            
+            log.info("Goong search request: query={}", query);
             Map<String, Object> response = restTemplate.getForObject(url, Map.class, query, apiKey);
+            log.info("Goong search raw response: {}", response);
             if (response != null && response.containsKey("results")) {
-                List<Map<String, Object>> results = (List<Map<String, Object>>) response.get("results");
+                Object resultsRaw = response.get("results");
+                log.info("Goong search results type: {}, value: {}", resultsRaw == null ? "null" : resultsRaw.getClass().getName(), resultsRaw);
+                if (resultsRaw == null) {
+                    return Collections.emptyList();
+                }
+                List<Map<String, Object>> results = (List<Map<String, Object>>) resultsRaw;
                 List<LocationDTO> locations = new ArrayList<>();
                 for (Map<String, Object> result : results) {
                     Map<String, Object> geometry = (Map<String, Object>) result.get("geometry");
                     Map<String, Object> location = (Map<String, Object>) geometry.get("location");
-                    
+
                     LocationDTO dto = LocationDTO.builder()
                             .displayName((String) result.get("formatted_address"))
                             .latitude(Double.valueOf(location.get("lat").toString()))
                             .longitude(Double.valueOf(location.get("lng").toString()))
                             .source("GOONG")
                             .build();
-                    
+
                     fillAddressComponents(dto, (List<Map<String, Object>>) result.get("address_components"));
                     locations.add(dto);
                 }
                 return locations;
             }
+            log.warn("Goong search: no 'results' key in response for query={}", query);
             return Collections.emptyList();
         } catch (Exception e) {
-            log.error("Goong search error for query {}: {}", query, e.getMessage());
+            log.error("Goong search error for query {}: {}", query, e.getMessage(), e);
             return Collections.emptyList();
         }
     }

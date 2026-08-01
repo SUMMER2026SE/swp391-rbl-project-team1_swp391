@@ -59,6 +59,8 @@ public class SecurityConfig {
             "/api/v1/ai/chat",
             // VNPay IPN — gọi server-to-server, cũng không có Bearer token.
             "/api/v1/payments/vnpay-ipn",
+            // Geocoding — address autocomplete + reverse geocode cho guest (Owner registration form)
+            "/api/v1/geocoding/**",
 
             "/actuator/health",
             "/actuator/info",
