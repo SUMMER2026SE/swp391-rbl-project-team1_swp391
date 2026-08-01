@@ -41,6 +41,22 @@ export interface DraftJoinMatchResponse {
   userMessage: string;
 }
 
+export interface DraftCreateMatchResponse {
+  bookingId: number;
+  defaultTitle: string;
+  stadiumName: string;
+  sportName: string;
+  playDate: string;
+  startTime: string;
+  endTime: string;
+  matchingType?: "INDIVIDUAL" | "TEAM_VS_TEAM" | null;
+  maxPlayers?: number | null;
+  skillLevel?: "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | null;
+  splitPrice?: boolean | null;
+  pricePerPlayer?: number | null;
+  missingFields?: string[];
+}
+
 export interface BookingSlotInfo {
   slotId: number;
   startTime: string; // ISO LocalDateTime (yyyy-MM-ddTHH:mm:ss)
@@ -84,4 +100,6 @@ export interface AiChatTurnResponse {
   matchId?: number | null;
   /** Thông tin kèo ghép nháp (intent: confirm_join_match) */
   draftJoinMatch?: DraftJoinMatchResponse | null;
+  /** Dữ liệu để hiển thị form cấu hình trước khi tạo kèo */
+  draftCreateMatch?: DraftCreateMatchResponse | null;
 }

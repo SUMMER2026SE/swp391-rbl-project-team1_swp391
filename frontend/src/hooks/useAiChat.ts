@@ -2,7 +2,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { sendChatMessage } from "@/lib/ai-chat-api";
 import api from "@/lib/api";
-import { ChatMessage, TimeSlotResponse, BookingAiResponse } from "@/types/aiChat";
+import {
+  ChatMessage,
+  TimeSlotResponse,
+  BookingAiResponse,
+  DraftCreateMatchResponse,
+} from "@/types/aiChat";
 import { StadiumResponse } from "@/types/stadium";
 import { MatchResponse } from "@/types/match";
 
@@ -55,6 +60,7 @@ export interface MessageItem {
   draftBooking?: any | null; // Thông tin booking nháp để user confirm
   matchId?: number | null; // ID kèo vừa tham gia (intent: join_match)
   draftJoinMatch?: any | null; // Thông tin kèo nháp để user confirm
+  draftCreateMatch?: DraftCreateMatchResponse | null; // Form cấu hình trước khi tạo kèo
   isHistory?: boolean; // Cờ đánh dấu tin nhắn load từ lịch sử cũ, không chạy lại typewriter
 }
 
@@ -179,6 +185,7 @@ export function useAiChat() {
         draftBooking: result.draftBooking,
         matchId: result.matchId,
         draftJoinMatch: result.draftJoinMatch,
+        draftCreateMatch: result.draftCreateMatch,
         isHistory: false, // Tin nhắn mới, kích hoạt typewriter
       };
 

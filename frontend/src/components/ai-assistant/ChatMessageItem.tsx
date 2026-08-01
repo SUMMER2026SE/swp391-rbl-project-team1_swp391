@@ -12,10 +12,13 @@ import { StadiumResultCard } from "@/components/ai-assistant/StadiumResultCard";
 import { SlotResultCard } from "@/components/ai-assistant/SlotResultCard";
 import { MatchResultCard } from "@/components/ai-assistant/MatchResultCard";
 import { DraftJoinMatchCard } from "@/components/ai-assistant/DraftJoinMatchCard";
+import { DraftCreateMatchCard } from "@/components/ai-assistant/DraftCreateMatchCard";
 
 interface ChatMessageProps {
   msg: MessageItem;
   isLatest: boolean;
+  onSend?: (message: string) => void | Promise<void>;
+  isSending?: boolean;
 }
 
 /** Map booking status code → label + color */
@@ -114,7 +117,7 @@ function BookingCard({ booking }: { booking: BookingAiResponse }) {
   );
 }
 
-export function ChatMessageItem({ msg, isLatest }: ChatMessageProps) {
+export function ChatMessageItem({ msg, isLatest, onSend, isSending = false }: ChatMessageProps) {
   const isAssistant = msg.type === "assistant";
   // Chỉ chạy typewriter nếu là tin nhắn AI mới nhất VÀ không phải load từ lịch sử
   const shouldAnimate = isAssistant && isLatest && !msg.isHistory;
@@ -274,6 +277,14 @@ export function ChatMessageItem({ msg, isLatest }: ChatMessageProps) {
             {/* Draft Join Match Card */}
             {msg.draftJoinMatch && (
               <DraftJoinMatchCard draftJoinMatch={msg.draftJoinMatch} />
+            )}
+
+            {msg.draftCreateMatch && (
+              <DraftCreateMatchCard
+                draft={msg.draftCreateMatch}
+                onSubmit={onSend}
+                disabled={!isLatest || isSending}
+              />
             )}
           </div>
         )}

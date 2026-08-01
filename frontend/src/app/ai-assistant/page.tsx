@@ -81,6 +81,8 @@ function AIAssistantPage() {
                   key={msg.id}
                   msg={msg}
                   isLatest={idx === messages.length - 1}
+                  onSend={handleSend}
+                  isSending={isSearching}
                 />
               ))}
 
