@@ -95,6 +95,22 @@ public class GroqKeyPoolManager {
     }
 
     /**
+     * Đánh dấu key bị lỗi xác thực (401/403) - hết credit hoặc bị block.
+     * Chuyển sang trạng thái cooldown rất lâu (ví dụ 24h) để tránh dùng lại liên tục.
+     */
+    public void markExhausted(String key) {
+        if (key == null || !apiKeys.contains(key)) {
+            return;
+        }
+
+        long cooldownMs = 24 * 60 * 60 * 1000L; // 24 hours
+        long cooldownUntil = System.currentTimeMillis() + cooldownMs;
+        coolingDownKeys.put(key, cooldownUntil);
+
+        log.error("GroqKeyPoolManager: Key ***{} marked as EXHAUSTED (Auth/Credit Error), cooldown for 24h", maskKey(key));
+    }
+
+    /**
      * Lấy số lượng key đang AVAILABLE (không cooldown).
      */
     public int getAvailableKeyCount() {

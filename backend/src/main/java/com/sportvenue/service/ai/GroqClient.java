@@ -103,10 +103,13 @@ public class GroqClient {
                 );
 
             } catch (LlmGatewayException e) {
-                if (e.getKind() != LlmGatewayException.Kind.RATE_LIMITED) {
+                if (e.getKind() == LlmGatewayException.Kind.RATE_LIMITED) {
+                    attempt = handleRateLimited(e, apiKey, attempt, maxTotalRetries);
+                } else if (e.getKind() == LlmGatewayException.Kind.AUTH_ERROR) {
+                    attempt = handleExhausted(e, apiKey, attempt, maxTotalRetries);
+                } else {
                     throw e;
                 }
-                attempt = handleRateLimited(e, apiKey, attempt, maxTotalRetries);
             } catch (RestClientException e) {
                 attempt = handleRestClientFailure(e, apiKey, attempt, maxTotalRetries);
             }
@@ -138,6 +141,20 @@ public class GroqClient {
 
         if (nextAttempt >= maxTotalRetries) {
             log.error("All API keys rate limited after {} attempts", maxTotalRetries);
+            throw e;
+        }
+        return nextAttempt;
+    }
+
+    /** Đánh dấu key hiện tại bị kiệt quệ (hết credit); trả về attempt kế tiếp. */
+    private int handleExhausted(LlmGatewayException e, String apiKey, int attempt, int maxTotalRetries) {
+        keyPoolManager.markExhausted(apiKey);
+
+        int nextAttempt = attempt + 1;
+        log.warn("Exhausted (Auth/Credit Error) on key ***{}, trying next key (attempt {}/{})", maskKey(apiKey), nextAttempt, maxTotalRetries);
+
+        if (nextAttempt >= maxTotalRetries) {
+            log.error("All API keys exhausted after {} attempts", maxTotalRetries);
             throw e;
         }
         return nextAttempt;
