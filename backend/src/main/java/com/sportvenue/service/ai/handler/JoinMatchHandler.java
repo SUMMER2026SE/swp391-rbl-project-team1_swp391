@@ -3,8 +3,12 @@ package com.sportvenue.service.ai.handler;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.sportvenue.dto.response.AiChatTurnResponse;
 import com.sportvenue.entity.MatchRequest;
+import com.sportvenue.entity.User;
 import com.sportvenue.entity.enums.MatchStatus;
+import com.sportvenue.entity.enums.MatchingType;
+import com.sportvenue.entity.enums.SkillLevel;
 import com.sportvenue.repository.MatchRequestRepository;
+import com.sportvenue.repository.UserRepository;
 import com.sportvenue.service.MatchRequestService;
 import com.sportvenue.service.ai.AiConversationContextService;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +31,7 @@ public class JoinMatchHandler {
     private final MatchRequestService matchRequestService;
     private final MatchRequestRepository matchRequestRepository;
     private final AiConversationContextService conversationContextService;
+    private final UserRepository userRepository;
 
     /**
      * Xử lý yêu cầu tham gia kèo từ chat.
@@ -92,6 +97,23 @@ public class JoinMatchHandler {
             message = args.get("message").asText();
         }
 
+        // Auto-generate team name + message for TEAM_VS_TEAM if not provided
+        if (match.getMatchingType() == MatchingType.TEAM_VS_TEAM
+                && (message == null || message.trim().isEmpty())) {
+            String userName = "Đội thách đấu";
+            try {
+                User user = userRepository.findById(userId).orElse(null);
+                if (user != null && !user.getFullName().isBlank()) {
+                    userName = "Đội " + user.getFullName();
+                }
+            } catch (Exception e) {
+                log.warn("Could not fetch user name for auto team name, using default", e);
+            }
+            String skillVi = mapSkillLevelToVietnamese(match.getSkillLevel());
+            message = userName + " trình độ " + skillVi + " muốn nhận kèo";
+            log.info("Auto-generated TEAM_VS_TEAM join message for user {}: {}", userId, message);
+        }
+
         // Create draft instead of executing join immediately
         try {
             com.sportvenue.dto.response.DraftJoinMatchResponse draft = com.sportvenue.dto.response.DraftJoinMatchResponse.builder()
@@ -147,5 +169,14 @@ public class JoinMatchHandler {
             return match.getComplex().getName();
         }
         return "Chưa xác định";
+    }
+
+    private String mapSkillLevelToVietnamese(SkillLevel level) {
+        if (level == null) return "trung bình";
+        return switch (level) {
+            case BEGINNER -> "cơ bản";
+            case INTERMEDIATE -> "trung bình";
+            case ADVANCED -> "nâng cao";
+        };
     }
 }
