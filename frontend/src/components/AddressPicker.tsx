@@ -225,7 +225,7 @@ export function AddressPicker({ initialAddress, initialLat, initialLng, onAddres
 
   return (
     <div className="space-y-4">
-      <div className="relative" ref={wrapperRef}>
+      <div className="relative z-[9999]" ref={wrapperRef}>
         <Label htmlFor="address-input">Địa chỉ sân *</Label>
         <div className="relative mt-2">
           <MapPin className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
